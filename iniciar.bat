@@ -1,5 +1,13 @@
 @echo off
 title Sistema ANPR Colombia - Servidor en Tiempo Real
+
+:: Prevenir agotamiento de memoria en pools de hilos de OpenBLAS/OMP en Windows
+set OPENBLAS_NUM_THREADS=1
+set OMP_NUM_THREADS=1
+set MKL_NUM_THREADS=1
+set NUMEXPR_NUM_THREADS=1
+set VECLIB_MAXIMUM_THREADS=1
+
 echo ===========================================================================
 echo SISTEMA DE RECONOCIMIENTO DE PLACAS VEHICULARES EN TIEMPO REAL (ANPR)
 echo Servidor Web: http://localhost:8000

@@ -1,4 +1,10 @@
 # Script PowerShell para iniciar el servidor ANPR con el interprete de Python correcto
+$env:OPENBLAS_NUM_THREADS = "1"
+$env:OMP_NUM_THREADS = "1"
+$env:MKL_NUM_THREADS = "1"
+$env:NUMEXPR_NUM_THREADS = "1"
+$env:VECLIB_MAXIMUM_THREADS = "1"
+
 Write-Host "===========================================================================" -ForegroundColor Cyan
 Write-Host "SISTEMA DE RECONOCIMIENTO DE PLACAS VEHICULARES EN TIEMPO REAL (ANPR)" -ForegroundColor Green
 Write-Host "Servidor Web: http://localhost:8000" -ForegroundColor Yellow

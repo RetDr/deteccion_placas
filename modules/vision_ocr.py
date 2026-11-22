@@ -8,12 +8,21 @@ Optimizaciones de Máxima Precisión y Corrección Sintáctica Colombiana:
 """
 
 import os
+
+# Prevenir agotamiento de memoria OpenBLAS en subprocesos de OpenCV/PyTorch/EasyOCR
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+
 import re
 import difflib
 import warnings
 import cv2
 import numpy as np
 
+cv2.setNumThreads(1)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,6 +30,7 @@ MODELS_DIR = os.path.join(BASE_DIR, "models")
 os.environ["YOLO_CONFIG_DIR"] = os.path.join(MODELS_DIR, "ultralytics")
 
 import torch
+torch.set_num_threads(2)
 from ultralytics import YOLO
 import easyocr
 

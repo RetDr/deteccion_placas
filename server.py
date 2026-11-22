@@ -6,6 +6,13 @@ Construido sobre FastAPI + Uvicorn con transmisión MJPEG a 30+ FPS y WebSockets
 import os
 import sys
 
+# Prevenir saturación de memoria de OpenBLAS/OMP en Windows con arquitectura multihilo
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
@@ -16,6 +23,7 @@ os.makedirs(os.environ["YOLO_CONFIG_DIR"], exist_ok=True)
 import time
 import base64
 import cv2
+cv2.setNumThreads(1)
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect

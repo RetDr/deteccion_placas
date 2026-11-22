@@ -9,12 +9,22 @@ Integrado con el Rastreador IoU (Object Tracking):
 
 import os
 import sys
+
+# Prevenir agotamiento de memoria OpenBLAS en hilos de captura y tracking
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+
 import time
 import base64
 import queue
 import threading
 import cv2
 import numpy as np
+
+cv2.setNumThreads(1)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
