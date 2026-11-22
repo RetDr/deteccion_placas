@@ -81,10 +81,12 @@ El pipeline procesa cada cuadro mediante una arquitectura desacoplada Productor-
 
 - **Deteccion Hibrida Multi-Escala:** Modelo YOLOv8 ultraligero complementado con segmentacion cromatica en espacio HSV para placas colombianas amarillas (servicio particular/publico) y blancas (servicio publico/oficial).
 - **Rastreo con Eliminacion de Duplicados:** Un solo vehiculo en transito genera un unico registro consolidado en el historial, eliminando alertas redundantes o falsos positivos recurrentes.
-- **Compensacion de Movimiento Vial:** Buffer Best-Shot que evalua la varianza del Laplaciano en tiempo real para seleccionar y enviar al OCR el fotograma de mayor nitidez.
+- **Compensacion de Movimiento Vial y Auto-Mejora en Vivo:** Buffer Best-Shot que evalua la varianza del Laplaciano en tiempo real. Si una placa sigue en pantalla con baja confianza, el sistema reintenta el OCR automaticamente tan pronto la nitidez mejora (>25%).
+- **Discriminacion Geometrica Avanzada (Q vs O / J):** Modulo morfologico basado en la norma DIN 1451 colombiana que analiza la simetria de cuadrantes exteriores, impidiendo confusiones entre la letra `Q`, la `O` o la `J`.
+- **Integracion Oficial SIMIT en Vivo (Datos Abiertos Colombia):** Consulta automatica a la API SODA (`datos.gov.co/resource/72nf-y4v3.json`) para recuperar comparendos oficiales, valor adeudado ($ COP) y estado de pago (`pagado_si_no = NO/SI`) sin resolver CAPTCHAs.
+- **Diagnostico Activo del Detector:** Si una imagen se toma movida o con baja luz, el detector no descarta en silencio; presenta la tarjeta con su porcentaje de confianza y advertencia diagnostica para guiar al operador.
+- **Interfaz Web Responsiva con Alertas Reactivas:** Diseno adaptable para movil, tableta y escritorio (sin emojis), con animaciones de borde perimetral (Alerta Roja para hurto policial, Alerta Amarilla para infracciones de transito y SOAT).
 - **Optimizacion para Camaras de Celular:** Compatibilidad nativa con Android 14 Webcam, DroidCam, Iriun e IP Webcam mediante backend DirectShow (`cv2.CAP_DSHOW`) sin bloqueos de negociacion de formato de color.
-- **Sintaxis y Normalizacion de Colombia:** Correccion automatica de confusiones habituales de OCR (ej. O/0, I/1, B/8, Z/2) segun la posicion obligatoria del caracter. Deteccion de municipios oficiales de transito (Bogota D.C., Medellin, Cali, Barranquilla, Envigado, etc.).
-- **Auditoria de Transito y Seguridad:** Cruce inmediato contra la base de datos de antecedentes locales con estados de multas SIMIT, vigencia de SOAT, revision tecnomecanica y reportes judiciales de hurto o inmovilizacion.
 - **Modo Dual Local / Gemini:** Funcionamiento 100% offline con EasyOCR local y opcion de conmutacion dinamica a Google Gemini 1.5 Flash Vision mediante clave de API.
 
 ---
@@ -109,12 +111,21 @@ deteccion_placas/
 │   ├── camera_stream.py         # Motor de captura, hilos de tracking y streaming MJPEG
 │   ├── database.py              # Administracion de base de datos SQLite y consultas
 │   ├── gemini_ocr.py            # Integracion cliente HTTP para API Google Gemini Flash
-│   ├── search_engine.py         # Motor de busqueda de 3 capas (Exacta, Difusa, Soundex)
+│   ├── search_engine.py         # Motor de busqueda en cascada (SQLite + SIMIT en vivo)
+│   ├── simit_connector.py       # Conector SODA a API Datos Abiertos Colombia (SIMIT)
 │   ├── tracker.py               # Rastreador IoU, filtro de temblor y gestion de pistas
-│   └── vision_ocr.py            # Segmentacion, preprocesamiento LAB/CLAHE y sintaxis
+│   └── vision_ocr.py            # Segmentacion, discriminador Q/O y sintaxis estricta
 │
 ├── templates/
-│   └── index.html               # Panel web de control, visualizacion y telemetria
+│   └── index.html               # Panel web responsivo, alertas animadas e inspeccion
+│
+├── tests/                       # Suite de pruebas unitarias y validaciones de sintaxis
+│   ├── scratch_test.py
+│   ├── scratch_test_crops.py
+│   ├── scratch_test_ocr.py
+│   ├── scratch_test_qo.py
+│   ├── scratch_test_rules.py
+│   └── test_pipeline.py
 │
 ├── app.py                       # Interfaz alternativa para pruebas en Streamlit
 ├── iniciar.bat                  # Lanzador rapido para Windows (CMD)
@@ -122,7 +133,7 @@ deteccion_placas/
 ├── registrar_placa.py           # Herramienta CLI para registrar vehiculos en la base de datos
 ├── requirements.txt             # Dependencias del proyecto
 ├── server.py                    # Servidor web principal FastAPI con WebSockets
-├── test_vision.py               # Suite de pruebas unitarias del pipeline de vision
+├── test_vision.py               # Validacion del pipeline de vision y recorte
 └── yolov8n.pt                   # Pesos base de deteccion YOLOv8
 ```
 
