@@ -5,6 +5,14 @@ Construido sobre FastAPI + Uvicorn con transmisión MJPEG a 30+ FPS y WebSockets
 
 import os
 import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+os.environ["YOLO_CONFIG_DIR"] = os.path.join(BASE_DIR, "models", "ultralytics")
+os.makedirs(os.environ["YOLO_CONFIG_DIR"], exist_ok=True)
+
 import time
 import base64
 import cv2
@@ -13,10 +21,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
 
 from modules.camera_stream import LiveCameraEngine, detectar_placas_por_color, aplicar_nms_cajas
 from modules.vision_ocr import obtener_modelos
