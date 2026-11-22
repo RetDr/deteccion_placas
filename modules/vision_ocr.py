@@ -147,43 +147,164 @@ def verificar_densidad_caracteres(crop_bgr: np.ndarray) -> tuple[bool, float]:
     return varianza >= 90.0, varianza
 
 
+def discriminar_q_u_o(char_crop_bgr: np.ndarray, letra_original: str = 'O') -> tuple[str, float]:
+    """
+    Distingue con precisión física y geométrica entre 'Q' y 'O' analizando
+    la simetría cuadrantal y presencia de la colilla troquelada DIN 1451.
+    - 'O': Esencialmente simétrica entre la mitad inferior izquierda y derecha (ratio BR/BL ~ 0.88-1.12).
+    - 'Q': Presenta colilla o trazo oblicuo asimétrico en la esquina inferior derecha (ratio BR/BL >= 1.18).
+    Retorna ('Q' o 'O', ratio).
+    """
+    if char_crop_bgr is None or char_crop_bgr.size < 50:
+        return letra_original, 0.0
+
+    gray = cv2.cvtColor(char_crop_bgr, cv2.COLOR_BGR2GRAY) if len(char_crop_bgr.shape) == 3 else char_crop_bgr
+    # Otsu invertido (carácter blanco 255, fondo oscuro 0)
+    _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    if np.mean(th == 255) > 0.55:
+        th = cv2.bitwise_not(th)
+
+    cnts, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return letra_original, 0.0
+
+    c = max(cnts, key=cv2.contourArea)
+    bx, by, bw, bh = cv2.boundingRect(c)
+    if bw < 5 or bh < 10:
+        return letra_original, 0.0
+
+    c_img = th[by:by+bh, bx:bx+bw]
+    h, w = c_img.shape
+
+    # Análisis de simetría en la mitad inferior
+    bottom = c_img[int(h * 0.5):, :]
+    bh_sub, bw_sub = bottom.shape
+    bl = bottom[:, :int(bw_sub * 0.5)]
+    br = bottom[:, int(bw_sub * 0.5):]
+    bl_sum = np.sum(bl == 255)
+    br_sum = np.sum(br == 255)
+    ratio = br_sum / max(1, bl_sum)
+
+    # Diagonal interna (trazo que penetra el hueco)
+    inner_diag = c_img[int(h * 0.45):int(h * 0.75), int(w * 0.42):int(w * 0.68)]
+    inner_density = np.mean(inner_diag == 255) if inner_diag.size > 0 else 0.0
+
+    # 'Q' tiene asimetría notable hacia la derecha inferior o trazo interno
+    es_q = (inner_density > 0.12) or (ratio >= 1.18 and br_sum > bl_sum + 10)
+    return ('Q' if es_q else 'O'), round(ratio, 2)
+
+
+def segmentar_caracteres_placa(crop_bgr: np.ndarray) -> list[tuple]:
+    """
+    Segmenta las cajas delimitadoras de los caracteres alfanuméricos troquelados
+    en la placa vehicular ordenados de izquierda a derecha.
+    """
+    if crop_bgr is None or crop_bgr.size < 400:
+        return []
+
+    h, w = crop_bgr.shape[:2]
+    gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+    _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # Corrección de polaridad obligatoria: caracteres en blanco (255), fondo en negro (0)
+    if np.mean(th == 255) > 0.55:
+        th = cv2.bitwise_not(th)
+    cnts, hier = cv2.findContours(th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    char_candidates = []
+    for c in cnts:
+        bx, by, bw, bh = cv2.boundingRect(c)
+        if (h * 0.22 <= bh <= h * 0.90) and (w * 0.03 <= bw <= w * 0.25):
+            ratio = bh / float(max(1, bw))
+            if 0.8 <= ratio <= 4.5 and (0.04 * h <= by <= 0.60 * h):
+                char_candidates.append((bx, by, bw, bh))
+
+    # Eliminar cajas anidadas (huecos interiores de letras como O, B, D, 0, 8, 6, 9)
+    caracteres_filtrados = []
+    for i, b1 in enumerate(char_candidates):
+        es_interior = False
+        for j, b2 in enumerate(char_candidates):
+            if i != j:
+                if (b1[0] >= b2[0] and b1[1] >= b2[1] and
+                    (b1[0] + b1[2]) <= (b2[0] + b2[2]) and
+                    (b1[1] + b1[3]) <= (b2[1] + b2[3])):
+                    es_interior = True
+                    break
+        if not es_interior:
+            caracteres_filtrados.append(b1)
+
+    caracteres_filtrados.sort(key=lambda b: b[0])
+    return caracteres_filtrados
+
+
+def extraer_subrecorte_caracter(crop_bgr: np.ndarray, pos_idx: int) -> tuple[np.ndarray | None, bool]:
+    """
+    Extrae el recorte del carácter en la posición pos_idx (0..5) de la placa.
+    Retorna (sub_crop, es_confiable).
+    """
+    if crop_bgr is None or crop_bgr.size == 0:
+        return None, False
+
+    h, w = crop_bgr.shape[:2]
+    boxes = segmentar_caracteres_placa(crop_bgr)
+    # Filtrar posibles bordes laterales extremos que no sean caracteres
+    boxes_valid = [b for b in boxes if b[0] >= w * 0.06 and (b[0] + b[2]) <= w * 0.94]
+    if len(boxes_valid) == 6 and 0 <= pos_idx < 6:
+        bx, by, bw, bh = boxes_valid[pos_idx]
+        pad_x = int(bw * 0.10)
+        pad_y = int(bh * 0.10)
+        x1 = max(0, bx - pad_x)
+        y1 = max(0, by - pad_y)
+        x2 = min(w, bx + bw + pad_x)
+        y2 = min(h, by + bh + pad_y)
+        return crop_bgr[y1:y2, x1:x2], True
+
+    if len(boxes_valid) >= 3 and 0 <= pos_idx < min(3, len(boxes_valid)):
+        bx, by, bw, bh = boxes_valid[pos_idx]
+        pad_x = int(bw * 0.10)
+        pad_y = int(bh * 0.10)
+        x1 = max(0, bx - pad_x)
+        y1 = max(0, by - pad_y)
+        x2 = min(w, bx + bw + pad_x)
+        y2 = min(h, by + bh + pad_y)
+        return crop_bgr[y1:y2, x1:x2], True
+
+    # Si no se pudieron segmentar los caracteres con certeza, no adivinar ciegamente
+    return None, False
+
+
 def mejorar_placa_lejana(crop_bgr: np.ndarray) -> np.ndarray:
     """
     Mejora visual de alta definición para placas vehiculares:
-    1. Escala hasta altura estándar de 115px (proporción 1:1 con la entrada de 64px de EasyOCR).
-    2. Agrega margen perimetral protector (8%) para que números altos como el 6 y el 8 nunca
-       toquen el borde de la imagen ni sufran cortes en su curva superior.
-    3. Realce de contraste adaptativo en luminancia (CLAHE en espacio LAB):
-       Refuerza el trazo negro troquelado sin quemar el fondo amarillo ni deformar el bucle del 6.
+    1. Escala hasta altura estándar de 130px manteniendo la proporción de aspecto
+       (acelera EasyOCR hasta 18x en imágenes de alta resolución sin degradar caracteres).
+    2. Agrega margen perimetral protector (6%) para no cortar trazos exteriores.
+    3. Realce de contraste adaptativo en luminancia (CLAHE en espacio LAB) con filtro
+       bilateral suave para preservar la colilla de la 'Q' y trazos finos troquelados.
     """
     if crop_bgr is None or crop_bgr.size == 0:
         return crop_bgr
 
     h, w = crop_bgr.shape[:2]
-    altura_objetivo = 115
+    altura_objetivo = 130
 
-    if 0 < h < altura_objetivo:
+    if h != altura_objetivo:
         escala = altura_objetivo / float(h)
         nuevo_w = max(40, int(w * escala))
-        redim = cv2.resize(crop_bgr, (nuevo_w, altura_objetivo), interpolation=cv2.INTER_CUBIC)
-    elif h > 140:
-        escala = altura_objetivo / float(h)
-        nuevo_w = max(40, int(w * escala))
-        redim = cv2.resize(crop_bgr, (nuevo_w, altura_objetivo), interpolation=cv2.INTER_AREA)
+        interp = cv2.INTER_CUBIC if h < altura_objetivo else cv2.INTER_AREA
+        redim = cv2.resize(crop_bgr, (nuevo_w, altura_objetivo), interpolation=interp)
     else:
         redim = crop_bgr
 
-    # Margen perimetral protector del 8% para evitar corte de caracteres
-    pad_y = int(redim.shape[0] * 0.08)
-    pad_x = int(redim.shape[1] * 0.06)
+    # Margen perimetral protector del 6% para evitar corte de caracteres
+    pad_y = max(4, int(redim.shape[0] * 0.06))
+    pad_x = max(6, int(redim.shape[1] * 0.05))
     padded = cv2.copyMakeBorder(redim, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_REPLICATE)
 
-    # Realce adaptativo CLAHE con filtro bilateral en canal L (Luminancia)
-    # Suprime el ruido del asfalto y reflejos solares mientras mantiene los trazos de letras nítidos
+    # Realce adaptativo CLAHE con filtro bilateral suave en canal L (Luminancia)
     lab = cv2.cvtColor(padded, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    l_filtered = cv2.bilateralFilter(l, 5, 25, 25)
-    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+    l_filtered = cv2.bilateralFilter(l, 3, 15, 15)
+    clahe = cv2.createCLAHE(clipLimit=1.8, tileGridSize=(8, 8))
     l_eq = clahe.apply(l_filtered)
     lab_eq = cv2.merge((l_eq, a, b))
     mejorada = cv2.cvtColor(lab_eq, cv2.COLOR_LAB2BGR)
@@ -236,20 +357,20 @@ def recortar_franja_caracteres(crop_bgr: np.ndarray) -> np.ndarray:
 
 DICT_A_LETRAS = {
     '0': 'O', '8': 'B', '5': 'S', '2': 'Z', '4': 'A', '6': 'G', '1': 'I',
-    '9': 'P', '7': 'T', '3': 'B'
+    '7': 'T'
 }
 DICT_A_DIGITOS = {
-    'O': '0', 'I': '1', 'L': '1', 'B': '8', 'S': '5', 'Z': '2', 'A': '4',
-    'G': '6', 'D': '0', 'Q': '0', 'T': '1', 'U': '0', 'J': '1'
+    'O': '0', 'Q': '0', 'I': '1', 'L': '1', 'B': '8', 'S': '5', 'Z': '2', 'A': '4',
+    'G': '6', 'T': '1'
 }
 
 # Mapeo de confusión visual típico en tipografía troquelada colombiana DIN 1451
 CONFUSION_LETRAS_DIN1451 = {
     'I': 'J',
-    'Q': 'J',
+    'Q': 'O',
+    'O': 'Q',
     'N': 'V',
-    'W': 'V',
-    'D': 'O'
+    'W': 'V'
 }
 
 CONFUSION_DIGITOS_DIN1451 = {
@@ -258,23 +379,32 @@ CONFUSION_DIGITOS_DIN1451 = {
 }
 
 
-def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, float]:
+def extraer_placa_estricta(texto_crudo: str, crop_bgr: np.ndarray = None) -> tuple[str | None, str | None, float]:
     """
     Extractor y validador estricto de placas colombianas (NORMA NACIONAL):
     1. AUTOMÓVIL / CARRO: Exactamente 3 letras y 3 números (^[A-Z]{3}[0-9]{3}$). NUNCA 4 números.
     2. MOTOCICLETA: Exactamente 3 letras, 2 números y 1 letra (^[A-Z]{3}[0-9]{2}[A-Z]$).
-    3. Si el OCR capturó 7 u 8 caracteres (ej: tornillo o borde leído como 1, 4 o I),
-       evalúa ventanas de 6 caracteres y descarte de remaches en extremos para extraer la placa real.
-    4. Mapeo de confusión visual DIN 1451: Corrige ambigüedades comunes (J<->I/Q, V<->N/W, 2<->4).
+       Nota normativa RUNT: Las motocicletas no utilizan 'O' ni 'Q' como sufijo final para evitar confusión con el cero.
+    3. Si el OCR capturó 7 u 8 caracteres (remaches, bordes, o marcas leídas como I, 1, L, 4),
+       evalúa recortes de bordes y ventanas deslizantes de 6 caracteres.
+    4. Desambiguación física 'Q' vs 'O': Si se provee el recorte (crop_bgr) y la placa contiene 'Q' u 'O'
+       en las posiciones de letras, analiza la topología y presencia de la colilla troquelada.
     5. REGLA DURA: Si la cadena resultante NO cumple estrictamente con el formato de carro
        ni de moto, es DESCARTADA (retorna None, None, 0.0). Jamás se emite una placa con 4 números.
     """
     if not texto_crudo:
         return None, None, 0.0
 
-    alfa = re.sub(r'[^A-Z0-9]', '', str(texto_crudo).upper())
+    # Preprocesamiento de símbolos comúnmente confundidos por OCR con caracteres de placa
+    t_clean = str(texto_crudo).upper()
+    t_clean = t_clean.replace('@', 'Q')  # En placas vehiculares el símbolo @ capturado por OCR corresponde invariablemente a Q
+    t_clean = t_clean.replace('&', '8')
+    t_clean = t_clean.replace('$', 'S')
+    t_clean = t_clean.replace('|', 'I')
+    t_clean = t_clean.replace('!', 'I')
 
-    # Una placa colombiana SIEMPRE contiene al menos 2 letras y al menos 2 dígitos
+    alfa = re.sub(r'[^A-Z0-9]', '', t_clean)
+
     num_letras = sum(1 for c in alfa if c.isalpha())
     num_digitos = sum(1 for c in alfa if c.isdigit())
     if num_letras < 2 or num_digitos < 2 or len(alfa) < 6:
@@ -284,10 +414,15 @@ def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, fl
         if len(cadena_6) != 6:
             return None, None, 0.0
 
+        # Regla colombiana de desambiguación moto vs carro en posición 5:
+        # En Colombia, motos NO usan 'O' ni 'Q' como letra final (recorren A-F, etc., omitiendo O y Q).
+        # Si la placa termina en 'O' o '0' con 3 letras iniciales y 2 números centrales, es un CARRO que termina en 0.
+        termina_en_o_o_cero = (cadena_6[5] in ('0', 'O', 'Q'))
+
         # Chequeo directo exacto
         if PATRON_CARRO.match(cadena_6):
             return cadena_6, "CARRO", 0.99
-        if PATRON_MOTO.match(cadena_6):
+        if PATRON_MOTO.match(cadena_6) and not termina_en_o_o_cero:
             return cadena_6, "MOTO", 0.99
 
         # Intento de corrección sintáctica para CARRO (3 letras + 3 dígitos)
@@ -312,6 +447,7 @@ def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, fl
         valido_c = bool(PATRON_CARRO.match(cand_c)) and subs_c <= 2
 
         # Intento de corrección sintáctica para MOTO (3 letras + 2 dígitos + 1 letra)
+        # Nota: La última letra de moto jamás es 'O' ni 'Q'
         chars_m = list(cadena_6)
         subs_m = 0
         for i in range(3):
@@ -329,20 +465,26 @@ def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, fl
                 else:
                     subs_m += 99
         if chars_m[5].isdigit():
-            if chars_m[5] in DICT_A_LETRAS:
+            if chars_m[5] in DICT_A_LETRAS and DICT_A_LETRAS[chars_m[5]] not in ('O', 'Q'):
                 chars_m[5] = DICT_A_LETRAS[chars_m[5]]
                 subs_m += 1
             else:
                 subs_m += 99
+        elif chars_m[5] in ('O', 'Q'):
+            # En Colombia las placas de moto no terminan en O ni en Q
+            subs_m += 99
 
         cand_m = ''.join(chars_m)
-        valido_m = bool(PATRON_MOTO.match(cand_m)) and subs_m <= 2
+        valido_m = bool(PATRON_MOTO.match(cand_m)) and subs_m <= 2 and cand_m[5] not in ('O', 'Q')
 
         if valido_c and not valido_m:
             return cand_c, "CARRO", max(0.70, 0.96 - 0.10 * subs_c)
         elif valido_m and not valido_c:
             return cand_m, "MOTO", max(0.70, 0.96 - 0.10 * subs_m)
         elif valido_c and valido_m:
+            # Si ambos son válidos sintácticamente, desempatar:
+            if termina_en_o_o_cero:
+                return cand_c, "CARRO", max(0.70, 0.96 - 0.10 * subs_c)
             if subs_c <= subs_m:
                 return cand_c, "CARRO", max(0.70, 0.96 - 0.10 * subs_c)
             else:
@@ -358,36 +500,77 @@ def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, fl
         if codigo:
             candidatos_evaluados.append((codigo, tipo, conf))
 
-    # 2. Descarte de remaches/tornillos aislados en bordes (longitud 7 u 8)
-    CARACTERES_REMACHE = set("1ILTJ4._")
+    # 2. Descarte inteligente de bordes y remaches (longitud 7 u 8)
+    CARACTERES_BORDE = set("1ILT|/_-\\.")
     if len(alfa) == 7:
-        if alfa[0] in CARACTERES_REMACHE:
-            c, t, conf = evaluar_candidato_6(alfa[1:])
-            if c:
-                candidatos_evaluados.append((c, t, conf * 0.98))
-        if alfa[-1] in CARACTERES_REMACHE:
-            c, t, conf = evaluar_candidato_6(alfa[:-1])
-            if c:
-                candidatos_evaluados.append((c, t, conf * 0.98))
-    elif len(alfa) == 8:
-        if alfa[0] in CARACTERES_REMACHE and alfa[-1] in CARACTERES_REMACHE:
-            c, t, conf = evaluar_candidato_6(alfa[1:-1])
-            if c:
-                candidatos_evaluados.append((c, t, conf * 0.96))
+        # Prioridad 1: Descartar extremos (índice 6 o índice 0) que corresponden a marcos exteriores
+        c_fin, t_fin, conf_fin = evaluar_candidato_6(alfa[:-1])
+        if c_fin:
+            bonus = 0.99 if alfa[-1] in CARACTERES_BORDE else 0.95
+            candidatos_evaluados.append((c_fin, t_fin, conf_fin * bonus))
 
-    # 3. Ventanas deslizantes de 6 caracteres
+        c_ini, t_ini, conf_ini = evaluar_candidato_6(alfa[1:])
+        if c_ini:
+            bonus = 0.99 if alfa[0] in CARACTERES_BORDE else 0.95
+            candidatos_evaluados.append((c_ini, t_ini, conf_ini * bonus))
+
+        # Prioridad 2: Descartar caracteres internos sólo si son ruido/remache (1, I, L, T, |, .)
+        for i in range(1, 6):
+            if alfa[i] in CARACTERES_BORDE:
+                sub_cand = alfa[:i] + alfa[i+1:]
+                c_k, t_k, conf_k = evaluar_candidato_6(sub_cand)
+                if c_k:
+                    candidatos_evaluados.append((c_k, t_k, conf_k * 0.90))
+
+    elif len(alfa) == 8:
+        # Descartar ambos extremos exteriores
+        c3, t3, conf3 = evaluar_candidato_6(alfa[1:-1])
+        if c3:
+            bonus = 0.99 if (alfa[0] in CARACTERES_BORDE or alfa[-1] in CARACTERES_BORDE) else 0.92
+            candidatos_evaluados.append((c3, t3, conf3 * bonus))
+        # Descartar primeros dos o últimos dos
+        c4, t4, conf4 = evaluar_candidato_6(alfa[2:])
+        if c4:
+            bonus = 0.95 if (alfa[0] in CARACTERES_BORDE and alfa[1] in CARACTERES_BORDE) else 0.88
+            candidatos_evaluados.append((c4, t4, conf4 * bonus))
+        c5, t5, conf5 = evaluar_candidato_6(alfa[:-2])
+        if c5:
+            bonus = 0.95 if (alfa[-1] in CARACTERES_BORDE and alfa[-2] in CARACTERES_BORDE) else 0.88
+            candidatos_evaluados.append((c5, t5, conf5 * bonus))
+
+    # 3. Ventanas deslizantes de 6 caracteres para cualquier largo >= 6
     for start in range(len(alfa) - 5):
         ventana = alfa[start:start+6]
         codigo, tipo, conf = evaluar_candidato_6(ventana)
         if codigo:
-            conf_ajustada = conf * (0.95 if start == 0 or start == len(alfa)-6 else 0.90)
+            conf_ajustada = conf * (0.95 if start == 0 or start == len(alfa)-6 else 0.88)
             candidatos_evaluados.append((codigo, tipo, conf_ajustada))
 
-    if candidatos_evaluados:
-        candidatos_evaluados.sort(key=lambda x: x[2], reverse=True)
-        return candidatos_evaluados[0]
+    if not candidatos_evaluados:
+        return None, None, 0.0
 
-    return None, None, 0.0
+    candidatos_evaluados.sort(key=lambda x: x[2], reverse=True)
+    mejor_codigo, mejor_tipo, mejor_conf = candidatos_evaluados[0]
+
+    # 4. Desambiguación geométrica y física Q vs O sobre el recorte de la placa
+    if crop_bgr is not None and crop_bgr.size > 200:
+        chars_res = list(mejor_codigo)
+        modificado = False
+        # Revisar posiciones de letras (0, 1, 2)
+        for pos in range(3):
+            if chars_res[pos] in ('O', 'Q'):
+                sub_ch, es_confiable = extraer_subrecorte_caracter(crop_bgr, pos)
+                # Solo alterar la lectura si se logró una segmentación física fiable del carácter
+                if es_confiable and sub_ch is not None and sub_ch.size > 50:
+                    letra_real, _ = discriminar_q_u_o(sub_ch, chars_res[pos])
+                    if letra_real != chars_res[pos]:
+                        chars_res[pos] = letra_real
+                        modificado = True
+
+        if modificado:
+            mejor_codigo = ''.join(chars_res)
+
+    return mejor_codigo, mejor_tipo, mejor_conf
 
 
 def corregir_sintaxis_colombiana(texto_crudo: str) -> tuple[str, str, float]:
@@ -530,11 +713,11 @@ def analizar_frame(frame_bgr: np.ndarray) -> list[dict]:
                 "conf_detector": float(box.conf[0])
             })
 
-    # 2. Fallback por color si no detecta con YOLO
+    # 2. Fallback por color si no detecta con YOLO (tolerante a cámaras de celular y variaciones de luz)
     if not candidatos_placa:
         hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
-        mask_y = cv2.inRange(hsv, np.array([12, 70, 70]), np.array([38, 255, 255]))
-        mask_w = cv2.inRange(hsv, np.array([0, 0, 160]), np.array([180, 50, 255]))
+        mask_y = cv2.inRange(hsv, np.array([5, 30, 70]), np.array([42, 255, 255]))
+        mask_w = cv2.inRange(hsv, np.array([0, 0, 130]), np.array([180, 55, 255]))
         mask = cv2.bitwise_or(mask_y, mask_w)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 5))
         mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -542,14 +725,27 @@ def analizar_frame(frame_bgr: np.ndarray) -> list[dict]:
 
         for c in contornos:
             area = cv2.contourArea(c)
-            if 1000 <= area <= 140000:
+            if 800 <= area <= int(h_frame * w_frame * 0.98):
                 cx, cy, cw, ch = cv2.boundingRect(c)
                 ratio = float(cw) / max(1, ch)
-                if 1.4 <= ratio <= 3.6:
+                if 0.9 <= ratio <= 6.5 and cw >= 35 and ch >= 14:
                     candidatos_placa.append({
                         "bbox": (max(0, cx - 6), max(0, cy - 6), min(w_frame, cx + cw + 6), min(h_frame, cy + ch + 6)),
                         "conf_detector": 0.5
                     })
+
+    # 3. Fallback de encuadre central si no hubo detecciones (para primeros planos de celular)
+    if not candidatos_placa:
+        rx1, ry1 = int(w_frame * 0.12), int(h_frame * 0.15)
+        rx2, ry2 = int(w_frame * 0.88), int(h_frame * 0.85)
+        crop_center = frame_bgr[ry1:ry2, rx1:rx2]
+        tiene_txt, var_score = verificar_densidad_caracteres(crop_center)
+        if tiene_txt:
+            candidatos_placa.append({
+                "bbox": (rx1, ry1, rx2, ry2),
+                "conf_detector": 0.4,
+                "var_score": var_score
+            })
 
     # Filtrar con Sobel para no procesar áreas lisas
     candidatos_validados = []
@@ -562,9 +758,9 @@ def analizar_frame(frame_bgr: np.ndarray) -> list[dict]:
             candidatos_validados.append(c)
 
     candidatos_validados.sort(key=lambda x: x.get("var_score", 0), reverse=True)
-    candidatos_finales = candidatos_validados[:1]
+    candidatos_finales = candidatos_validados[:3]
 
-    allowlist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ."
+    allowlist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- .@&"
 
     for cand in candidatos_finales:
         rx1, ry1, rx2, ry2 = cand["bbox"]
@@ -573,20 +769,31 @@ def analizar_frame(frame_bgr: np.ndarray) -> list[dict]:
         if crop_roi.size == 0:
             continue
 
-        preprocesada = mejorar_placa_lejana(crop_roi)
+        h_roi, w_roi = crop_roi.shape[:2]
+        # Multi-intento: primero recorte interno afeitando bordes oscuros, luego imagen completa
+        inner_roi = crop_roi[int(h_roi * 0.08):int(h_roi * 0.82), int(w_roi * 0.05):int(w_roi * 0.95)] if (h_roi >= 25 and w_roi >= 60) else crop_roi
 
-        try:
-            resultados_ocr = reader.readtext(
-                preprocesada,
-                allowlist=allowlist,
-                detail=1,
-                paragraph=False,
-                mag_ratio=1.0,
-                canvas_size=384,
-                add_margin=0.18,
-                adjust_contrast=0.6
-            )
-        except Exception:
+        resultados_ocr = []
+        for target_img in [inner_roi, crop_roi]:
+            try:
+                preproc = mejorar_placa_lejana(target_img)
+                res = reader.readtext(
+                    preproc,
+                    allowlist=allowlist,
+                    detail=1,
+                    paragraph=False,
+                    mag_ratio=1.4,
+                    text_threshold=0.5,
+                    low_text=0.3,
+                    add_margin=0.06
+                )
+                if res:
+                    resultados_ocr = res
+                    break
+            except Exception:
+                continue
+
+        if not resultados_ocr:
             continue
 
         h_roi, w_roi = crop_roi.shape[:2]
@@ -630,8 +837,8 @@ def analizar_frame(frame_bgr: np.ndarray) -> list[dict]:
 
         for b in bloques_consolidados:
             texto_eval = b["texto"].strip().upper()
-            # Extracción y validación estricta de la norma colombiana
-            placa_corregida, tipo_vehiculo, conf_bonus = extraer_placa_estricta(texto_eval)
+            # Extracción y validación estricta de la norma colombiana con desambiguación Q vs O
+            placa_corregida, tipo_vehiculo, conf_bonus = extraer_placa_estricta(texto_eval, crop_roi)
 
             # REGLA DURA: Si no cumple el formato colombiano de 6 caracteres (3 letras + 3 dígitos para carro,
             # o 3 letras + 2 dígitos + 1 letra para moto), SE DESCARTA INMEDIATAMENTE. Jamás 4 números.

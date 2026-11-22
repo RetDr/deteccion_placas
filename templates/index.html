@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sistema ANPR - Reconocimiento de Placas en Tiempo Real</title>
     <style>
         :root {
@@ -18,6 +18,9 @@
             --color-moto: #FFB300;
             --plate-yellow: #FFD200;
             --plate-border: #111111;
+            --color-alert-red: #FF1744;
+            --color-alert-yellow: #FFB300;
+            --color-alert-green: #00E676;
         }
 
         * {
@@ -30,26 +33,32 @@
             background-color: var(--bg-base);
             color: var(--text-primary);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            height: 100vh;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow-x: hidden;
         }
 
         /* Top Header */
         header {
             background-color: var(--bg-surface);
             border-bottom: 1px solid var(--border-subtle);
-            padding: 12px 24px;
+            padding: 12px 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
         .header-title {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
         .system-code {
@@ -59,12 +68,14 @@
             background: var(--bg-elevated);
             padding: 4px 10px;
             border-radius: 4px;
-            color: var(--text-secondary);
-            border: 1px solid var(--border-subtle);
+            color: var(--border-active);
+            border: 1px solid rgba(0, 230, 118, 0.3);
+            white-space: nowrap;
+            font-weight: 700;
         }
 
         h1 {
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             font-weight: 600;
             letter-spacing: 0.5px;
             color: var(--text-primary);
@@ -73,7 +84,7 @@
         .header-status {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 12px;
         }
 
         .status-pill {
@@ -88,6 +99,7 @@
             color: var(--border-active);
             padding: 5px 12px;
             border-radius: 20px;
+            white-space: nowrap;
         }
 
         .status-dot {
@@ -111,6 +123,7 @@
             grid-template-columns: 1fr 440px;
             gap: 16px;
             padding: 16px;
+            height: calc(100vh - 65px);
             overflow: hidden;
         }
 
@@ -122,36 +135,46 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0;
         }
 
         .viewport-toolbar {
             background: var(--bg-surface);
-            padding: 10px 16px;
+            padding: 10px 14px;
             border-bottom: 1px solid var(--border-subtle);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .viewport-controls {
             display: flex;
-            gap: 10px;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
         }
 
         .btn {
             background: var(--bg-elevated);
             color: var(--text-primary);
             border: 1px solid var(--border-subtle);
-            padding: 6px 14px;
+            padding: 7px 12px;
             font-size: 0.8rem;
             font-weight: 500;
             border-radius: 4px;
             cursor: pointer;
             transition: all 0.15s ease;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .btn:hover {
             border-color: var(--text-secondary);
+            background: #232b3d;
         }
 
         .btn-active {
@@ -168,6 +191,7 @@
             justify-content: center;
             position: relative;
             overflow: hidden;
+            min-height: 240px;
         }
 
         .video-stream {
@@ -176,19 +200,65 @@
             object-fit: contain;
         }
 
-        .telemetry-bar {
+        .snap-container {
+            padding: 10px 14px;
             background: var(--bg-surface);
             border-top: 1px solid var(--border-subtle);
-            padding: 8px 16px;
+        }
+
+        .btn-snap-action {
+            width: 100%;
+            padding: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #00C853, #00E676);
+            color: #0B0E14;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 230, 118, 0.25);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-snap-action:hover {
+            background: linear-gradient(135deg, #00E676, #69F0AE);
+            box-shadow: 0 6px 16px rgba(0, 230, 118, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-snap-action:active {
+            transform: translateY(1px);
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+
+        .telemetry-bar {
+            background: var(--bg-base);
+            border-top: 1px solid var(--border-subtle);
+            padding: 8px 14px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
             font-family: monospace;
-            font-size: 0.78rem;
+            font-size: 0.76rem;
             color: var(--text-secondary);
         }
 
         .telemetry-item strong {
-            color: var(--text-primary);
+            color: var(--border-active);
         }
 
         /* Right Panel - Detections Feed */
@@ -199,19 +269,22 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0;
         }
 
         .detections-header {
-            padding: 14px 16px;
+            padding: 12px 16px;
             border-bottom: 1px solid var(--border-subtle);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .detections-header h2 {
-            font-size: 0.95rem;
-            font-weight: 600;
+            font-size: 0.9rem;
+            font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.8px;
             color: var(--text-primary);
@@ -219,16 +292,19 @@
 
         .summary-tags {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .tag-count {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             font-family: monospace;
             background: var(--bg-elevated);
             padding: 3px 8px;
             border-radius: 3px;
             color: var(--text-secondary);
+            border: 1px solid var(--border-subtle);
         }
 
         .tag-count strong {
@@ -248,12 +324,14 @@
         .plate-card {
             background-color: var(--bg-elevated);
             border: 1px solid var(--border-subtle);
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 12px;
             display: grid;
-            grid-template-columns: 140px 1fr;
-            gap: 14px;
+            grid-template-columns: 130px 1fr;
+            gap: 12px;
             animation: slideIn 0.25s ease forwards;
+            transition: all 0.3s ease;
+            position: relative;
         }
 
         @keyframes slideIn {
@@ -261,21 +339,172 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* ================= ALERT ANIMATIONS FOR IRREGULARITIES ================= */
+
+        /* Red Alert (Reported Stolen / Police Seizure) */
+        .card-alert-rojo {
+            border-color: #FF1744 !important;
+            animation: alert-shake 0.5s ease, pulse-red-border 2s infinite ease-in-out !important;
+            background: linear-gradient(135deg, rgba(255, 23, 68, 0.08) 0%, var(--bg-elevated) 100%) !important;
+        }
+
+        @keyframes pulse-red-border {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.6), inset 0 0 8px rgba(255, 23, 68, 0.15);
+                border-color: #FF1744;
+            }
+            50% {
+                box-shadow: 0 0 20px 4px rgba(255, 23, 68, 0.75), inset 0 0 16px rgba(255, 23, 68, 0.35);
+                border-color: #FF5252;
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.6), inset 0 0 8px rgba(255, 23, 68, 0.15);
+                border-color: #FF1744;
+            }
+        }
+
+        @keyframes alert-shake {
+            0%, 100% { transform: translateX(0); }
+            15%, 45%, 75% { transform: translateX(-4px); }
+            30%, 60%, 90% { transform: translateX(4px); }
+        }
+
+        .badge-red {
+            background: rgba(255, 23, 68, 0.25);
+            color: #FF1744;
+            border: 1px solid rgba(255, 23, 68, 0.8);
+            animation: badge-pulse-red 1.5s infinite ease-in-out;
+        }
+
+        @keyframes badge-pulse-red {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 4px rgba(255, 23, 68, 0.4);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 12px rgba(255, 23, 68, 0.9);
+                background: rgba(255, 23, 68, 0.45);
+                border-color: #FF1744;
+            }
+        }
+
+        /* Yellow Alert (SIMIT Fines / Expired SOAT / Tecno) */
+        .card-alert-amarillo {
+            border-color: #FFB300 !important;
+            animation: pulse-yellow-border 2.5s infinite ease-in-out !important;
+            background: linear-gradient(135deg, rgba(255, 179, 0, 0.06) 0%, var(--bg-elevated) 100%) !important;
+        }
+
+        @keyframes pulse-yellow-border {
+            0% {
+                box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.5), inset 0 0 6px rgba(255, 179, 0, 0.1);
+                border-color: #FFB300;
+            }
+            50% {
+                box-shadow: 0 0 16px 2px rgba(255, 179, 0, 0.65), inset 0 0 12px rgba(255, 179, 0, 0.25);
+                border-color: #FFD54F;
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.5), inset 0 0 6px rgba(255, 179, 0, 0.1);
+                border-color: #FFB300;
+            }
+        }
+
+        .badge-yellow {
+            background: rgba(255, 179, 0, 0.2);
+            color: #FFB300;
+            border: 1px solid rgba(255, 179, 0, 0.6);
+            animation: badge-pulse-yellow 2s infinite ease-in-out;
+        }
+
+        @keyframes badge-pulse-yellow {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 3px rgba(255, 179, 0, 0.3);
+            }
+            50% {
+                transform: scale(1.03);
+                box-shadow: 0 0 10px rgba(255, 179, 0, 0.7);
+                background: rgba(255, 179, 0, 0.35);
+                border-color: #FFD54F;
+            }
+        }
+
+        /* Green Clean Card */
+        .card-alert-verde {
+            border-color: rgba(0, 230, 118, 0.25);
+        }
+
+        .badge-green {
+            background: rgba(0, 230, 118, 0.15);
+            color: #00E676;
+            border: 1px solid rgba(0, 230, 118, 0.4);
+        }
+
+        .alert-beacon {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .beacon-red {
+            background: #FF1744;
+            box-shadow: 0 0 6px #FF1744;
+            animation: pulse 1s infinite;
+        }
+
+        .beacon-yellow {
+            background: #FFB300;
+            box-shadow: 0 0 6px #FFB300;
+            animation: pulse 1.5s infinite;
+        }
+
+        .beacon-green {
+            background: #00E676;
+        }
+
+        /* Card Content Styling */
         .plate-card-crop {
             background: #000;
-            border-radius: 4px;
+            border-radius: 6px;
             border: 1px solid var(--border-subtle);
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            max-height: 90px;
+            height: 90px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .plate-card-crop:hover {
+            border-color: var(--border-active);
+            transform: scale(1.02);
         }
 
         .plate-card-crop img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            background: #0d1117;
+        }
+
+        .plate-card-crop .zoom-hint {
+            position: absolute;
+            bottom: 3px;
+            right: 4px;
+            background: rgba(0,0,0,0.75);
+            color: #EDF2F7;
+            font-size: 0.58rem;
+            padding: 2px 5px;
+            border-radius: 3px;
+            pointer-events: none;
+            letter-spacing: 0.5px;
+            font-weight: 600;
         }
 
         .plate-card-crop .no-crop {
@@ -288,6 +517,7 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            min-width: 0;
         }
 
         /* Colombian Plate Spec Badge */
@@ -296,26 +526,26 @@
             color: #000;
             border: 2px solid var(--plate-border);
             border-radius: 4px;
-            padding: 4px 10px;
+            padding: 3px 10px;
             display: inline-flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
             align-self: flex-start;
         }
 
         .plate-text-code {
             font-family: "Lucida Console", "Courier New", monospace;
-            font-size: 1.35rem;
+            font-size: 1.3rem;
             font-weight: 900;
-            letter-spacing: 2.5px;
+            letter-spacing: 2px;
             line-height: 1.1;
         }
 
         .plate-text-municipio {
             font-family: -apple-system, sans-serif;
-            font-size: 0.62rem;
+            font-size: 0.6rem;
             font-weight: 800;
             letter-spacing: 1.2px;
             text-transform: uppercase;
@@ -327,12 +557,14 @@
             justify-content: space-between;
             align-items: center;
             margin-top: 8px;
-            font-size: 0.75rem;
+            font-size: 0.74rem;
             color: var(--text-secondary);
+            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .type-badge {
-            font-size: 0.7rem;
+            font-size: 0.68rem;
             font-weight: 700;
             letter-spacing: 0.5px;
             padding: 2px 6px;
@@ -355,34 +587,19 @@
             font-size: 0.68rem;
             font-weight: 700;
             letter-spacing: 0.5px;
-            padding: 2px 8px;
-            border-radius: 3px;
+            padding: 3px 8px;
+            border-radius: 4px;
             text-transform: uppercase;
-        }
-
-        .badge-green {
-            background: rgba(0, 230, 118, 0.15);
-            color: #00E676;
-            border: 1px solid rgba(0, 230, 118, 0.4);
-        }
-
-        .badge-yellow {
-            background: rgba(255, 179, 0, 0.15);
-            color: #FFB300;
-            border: 1px solid rgba(255, 179, 0, 0.4);
-        }
-
-        .badge-red {
-            background: rgba(255, 23, 68, 0.2);
-            color: #FF1744;
-            border: 1px solid rgba(255, 23, 68, 0.5);
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
         }
 
         .antecedentes-box {
             margin-top: 8px;
             padding: 8px 10px;
             background: var(--bg-surface);
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 0.72rem;
             color: var(--text-secondary);
             display: flex;
@@ -395,23 +612,28 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
         }
 
         .btn-simit {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             margin-top: 4px;
             font-size: 0.68rem;
             color: #00E676;
             text-decoration: none;
             border: 1px solid rgba(0, 230, 118, 0.3);
-            padding: 2px 6px;
+            padding: 2px 7px;
             border-radius: 3px;
             align-self: flex-start;
             transition: all 0.2s ease;
+            font-weight: 600;
         }
 
         .btn-simit:hover {
-            background: rgba(0, 230, 118, 0.1);
+            background: rgba(0, 230, 118, 0.15);
             border-color: #00E676;
         }
 
@@ -424,7 +646,7 @@
         }
 
         .meter-bar {
-            width: 50px;
+            width: 44px;
             height: 5px;
             background: var(--bg-surface);
             border-radius: 3px;
@@ -446,13 +668,219 @@
             font-size: 0.85rem;
             text-align: center;
             gap: 8px;
+            padding: 30px;
+        }
+
+        /* Lightbox Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .modal-content {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            max-width: 600px;
+            width: 100%;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            animation: modalFade 0.2s ease;
+        }
+
+        @keyframes modalFade {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .modal-img-container {
+            background: #000;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-height: 320px;
+        }
+
+        .modal-img-container img {
+            max-width: 100%;
+            max-height: 320px;
+            object-fit: contain;
+        }
+
+        .btn-modal-close {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            align-self: flex-end;
+            font-weight: 600;
+            font-size: 0.82rem;
+        }
+
+        .btn-modal-close:hover {
+            border-color: var(--border-active);
+            color: var(--border-active);
+        }
+
+        /* ================= RESPONSIVE DESIGN BREAKPOINTS ================= */
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr 360px;
+                gap: 12px;
+                padding: 12px;
+            }
+
+            .plate-card {
+                grid-template-columns: 110px 1fr;
+                gap: 10px;
+            }
+
+            .plate-text-code {
+                font-size: 1.15rem;
+                letter-spacing: 1.5px;
+            }
+        }
+
+        @media (max-width: 860px) {
+            body {
+                height: auto;
+                overflow-y: auto;
+            }
+
+            header {
+                padding: 10px 14px;
+            }
+
+            main {
+                display: flex;
+                flex-direction: column;
+                height: auto;
+                overflow: visible;
+                padding: 12px;
+                gap: 16px;
+            }
+
+            .viewport-panel {
+                min-height: auto;
+                overflow: visible;
+            }
+
+            .video-container {
+                min-height: 260px;
+                height: 52vw;
+                max-height: 480px;
+            }
+
+            .viewport-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .viewport-controls {
+                flex-direction: row;
+                width: 100%;
+            }
+
+            .viewport-controls .btn, 
+            .viewport-controls select {
+                flex: 1 1 calc(50% - 8px);
+                min-width: 140px;
+                text-align: center;
+                justify-content: center;
+            }
+
+            .telemetry-bar {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .detections-panel {
+                height: auto;
+                max-height: none;
+                overflow: visible;
+            }
+
+            .detections-list {
+                max-height: 550px;
+                overflow-y: auto;
+            }
+        }
+
+        @media (max-width: 540px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+
+            .header-status {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            h1 {
+                font-size: 0.95rem;
+            }
+
+            .viewport-controls .btn, 
+            .viewport-controls select {
+                flex: 1 1 100%;
+            }
+
+            .telemetry-bar {
+                grid-template-columns: 1fr;
+                font-size: 0.72rem;
+            }
+
+            .plate-card {
+                grid-template-columns: 1fr;
+            }
+
+            .plate-card-crop {
+                height: 120px;
+            }
+
+            .btn-snap-action {
+                font-size: 0.88rem;
+                padding: 11px;
+            }
         }
     </style>
 </head>
 <body>
     <header>
         <div class="header-title">
-            <span class="system-code">ANPR-V1</span>
+            <span class="system-code">ANPR COLOMBIA</span>
             <h1>SISTEMA DE RECONOCIMIENTO DE PLACAS VEHICULARES</h1>
         </div>
         <div class="header-status">
@@ -468,32 +896,42 @@
         <section class="viewport-panel">
             <div class="viewport-toolbar">
                 <div class="viewport-controls">
-                    <select class="btn" id="select-source" onchange="onSourceChange(this.value)" style="cursor: pointer; background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-subtle);">
-                        <option value="1" selected>FUENTE: CAMARA 1 (CAMARA USB / CELULAR - PRINCIPAL)</option>
-                        <option value="0">FUENTE: CAMARA 0 (WEBCAM INTEGRADA LAPTOP)</option>
-                        <option value="2">FUENTE: CAMARA 2 (SECUNDARIA USB)</option>
-                        <option value="file">FUENTE: VIDEO DE ARCHIVO</option>
-                        <option value="custom">FUENTE: URL / IP STREAM</option>
+                    <select class="btn" id="select-source" onchange="onSourceChange(this.value)" style="cursor: pointer;">
+                        <option value="1" selected>FUENTE: CAMARA 1 (USB / CELULAR)</option>
+                        <option value="0">FUENTE: CAMARA 0 (WEBCAM LAPTOP)</option>
+                        <option value="2">FUENTE: CAMARA 2 (SECUNDARIA)</option>
+                        <option value="file">FUENTE: VIDEO ARCHIVO</option>
+                        <option value="custom">FUENTE: STREAM IP / DROIDCAM</option>
                     </select>
+                    <button class="btn" onclick="actualizarListaCamaras()" title="Escanear y detectar camaras conectadas">ACTUALIZAR CAMARAS</button>
                     <button class="btn btn-active" id="btn-roi" onclick="toggleRoi()">ENCUADRE OPTICO: ACTIVO</button>
+                    <button class="btn" id="btn-simit-status" onclick="abrirModalSimit()">SIMIT: CONECTADO</button>
                     <button class="btn" id="btn-gemini" onclick="configurarGemini()">MOTOR: LOCAL (EasyOCR)</button>
                 </div>
-                <div style="font-size: 0.8rem; color: var(--text-secondary);">
-                    ESTADO: <strong id="lbl-source" style="color: var(--text-primary);">LISTO</strong>
+                <div style="font-size: 0.78rem; color: var(--text-secondary);">
+                    ESTADO: <strong id="lbl-source" style="color: var(--border-active);">LISTO</strong>
                 </div>
             </div>
 
             <div class="video-container">
-                <img id="video-stream" class="video-stream" src="/video_feed" alt="Transmision de video">
+                <img id="video-stream" class="video-stream" src="/video_feed" alt="Transmision de video en vivo">
             </div>
 
-            <button class="btn btn-active" id="btn-snap" style="width: 100%; padding: 12px; font-size: 0.95rem; font-weight: bold; margin-top: 10px; cursor: pointer; letter-spacing: 0.5px; border-radius: 4px;" onclick="capturarYConsultar()">TOMAR FOTO Y CONSULTAR PLACA (ESPACIO)</button>
+            <div class="snap-container">
+                <button class="btn-snap-action" id="btn-snap" onclick="capturarYConsultar()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                    <span>TOMAR FOTO Y CONSULTAR PLACA (ESPACIO)</span>
+                </button>
+            </div>
 
             <div class="telemetry-bar">
                 <div class="telemetry-item">FPS CAMARA: <strong id="val-fps">0.0</strong></div>
-                <div class="telemetry-item">FPS PROCESAMIENTO: <strong id="val-ocr-fps">0.0</strong> FPS</div>
+                <div class="telemetry-item">FPS OCR: <strong id="val-ocr-fps">0.0</strong></div>
                 <div class="telemetry-item">LATENCIA: <strong id="val-latency">0.0</strong> ms</div>
-                <div class="telemetry-item">CUADROS ANALIZADOS: <strong id="val-frames">0</strong></div>
+                <div class="telemetry-item">CUADROS: <strong id="val-frames">0</strong></div>
             </div>
         </section>
 
@@ -505,18 +943,69 @@
                     <span class="tag-count">TOTAL: <strong id="cnt-total">0</strong></span>
                     <span class="tag-count">AUTOS: <strong id="cnt-autos">0</strong></span>
                     <span class="tag-count">MOTOS: <strong id="cnt-motos">0</strong></span>
-                    <button class="btn" style="padding: 2px 7px; font-size: 0.70rem; margin-left: 8px;" onclick="limpiarRegistros()">LIMPIAR</button>
+                    <button class="btn" style="padding: 3px 8px; font-size: 0.70rem; margin-left: 4px;" onclick="limpiarRegistros()">LIMPIAR</button>
                 </div>
             </div>
 
             <div class="detections-list" id="plates-container">
                 <div class="empty-state" id="empty-state">
                     <span>SIN DETECCIONES REGISTRADAS</span>
-                    <span style="font-size: 0.75rem;">El sistema registrará automáticamente las placas detectadas.</span>
+                    <span style="font-size: 0.75rem;">El sistema registrará automáticamente las placas y fotogramas detectados.</span>
                 </div>
             </div>
         </section>
     </main>
+
+    <!-- Modal para Inspeccionar Fotograma Guardado en Alta Definición -->
+    <div class="modal-overlay" id="crop-modal" onclick="cerrarModalFotograma(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modal-title">FOTOGRAMA DE PLACA</h3>
+                <span id="modal-badge"></span>
+            </div>
+            <div class="modal-img-container">
+                <img id="modal-img" src="" alt="Fotograma ampliado">
+            </div>
+            <div id="modal-meta" style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;"></div>
+            <button class="btn-modal-close" onclick="cerrarModalFotograma()">CERRAR</button>
+        </div>
+    </div>
+
+    <!-- Modal para Configuración y Estado de Conexión SIMIT -->
+    <div class="modal-overlay" id="simit-modal" onclick="cerrarModalSimit(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3>CONEXION SIMIT (FEDERACION COLOMBIANA DE MUNICIPIOS)</h3>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; display: flex; flex-direction: column; gap: 10px;">
+                <div>
+                    <strong>Estado actual:</strong> <span id="simit-provider-lbl" style="color: var(--border-active); font-weight: 700;">BASE LOCAL SQLITE (SINCRONIZADA)</span>
+                </div>
+                <div>
+                    La base de datos local SQLite contiene los registros de antecedentes, multas y comparendos SIMIT para consultas instantáneas en menos de 0.2 ms.
+                </div>
+                <div style="background: var(--bg-elevated); padding: 10px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <strong>Opciones de Conexión en Línea:</strong>
+                    <ul style="margin-left: 18px; margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+                        <li><strong>Base Local Indexada:</strong> Activa por defecto (sin necesidad de API Key ni latencia de red).</li>
+                        <li><strong>Gateway REST Oficial (Verifik / PlacApi):</strong> Permite sincronizar multas en vivo por cada vehículo reconocido.</li>
+                        <li><strong>Portal Oficial FCM:</strong> Enlace directo disponible en cada tarjeta de vehículo.</li>
+                    </ul>
+                </div>
+                <div>
+                    <label style="font-weight: 600; display: block; margin-bottom: 4px;">Configurar Token / API Key de Proveedor SIMIT (Opcional):</label>
+                    <input type="text" id="simit-api-key" placeholder="Ingresa token de Verifik / PlacApi o deja vacio" style="width: 100%; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 4px; font-size: 0.8rem;">
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                <a href="https://www.fcm.org.co/simit/#/home-public" target="_blank" class="btn-simit" style="padding: 6px 12px; font-size: 0.78rem;">ABRIR PORTAL OFICIAL SIMIT</a>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-active" onclick="guardarConfiguracionSimit()">GUARDAR</button>
+                    <button class="btn-modal-close" onclick="cerrarModalSimit()">CERRAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         const platesContainer = document.getElementById("plates-container");
@@ -562,10 +1051,10 @@
         }, 1500);
 
         function updateTelemetry(data) {
-            document.getElementById("val-fps").innerText = data.camera_fps.toFixed(1);
-            document.getElementById("val-ocr-fps").innerText = data.ocr_fps.toFixed(1);
-            document.getElementById("val-latency").innerText = data.inference_latency_ms.toFixed(1);
-            document.getElementById("val-frames").innerText = data.total_frames_analyzed;
+            document.getElementById("val-fps").innerText = Number(data.camera_fps || 0).toFixed(1);
+            document.getElementById("val-ocr-fps").innerText = Number(data.ocr_fps || 0).toFixed(1);
+            document.getElementById("val-latency").innerText = Number(data.inference_latency_ms || 0).toFixed(1);
+            document.getElementById("val-frames").innerText = data.total_frames_analyzed || 0;
         }
 
         function renderPlate(data) {
@@ -575,7 +1064,7 @@
 
             const plateId = `plate-${data.placa}`;
             const isCar = data.tipo === "CARRO";
-            const confPct = Math.round(data.confianza * 100);
+            const confPct = Math.round((data.confianza || 0.8) * 100);
 
             let card = document.getElementById(plateId);
 
@@ -595,32 +1084,53 @@
             registeredPlates.set(data.placa, data);
 
             const cropImgHtml = data.crop_base64
-                ? `<img src="data:image/jpeg;base64,${data.crop_base64}" alt="Recorte ${data.placa}">`
+                ? `<img src="data:image/jpeg;base64,${data.crop_base64}" alt="Fotograma ${data.placa}"><span class="zoom-hint">AMPLIAR</span>`
                 : `<span class="no-crop">SIN RECORTE</span>`;
 
-            const typeClass = isCar ? "type-car" : "type-moto";
-            const typeLabel = isCar ? "AUTOMOVIL" : "MOTOCICLETA";
-            const municipio = data.municipio || (isCar ? "COLOMBIA" : "COLOMBIA");
+            const isDudosa = data.es_dudosa || data.placa === "DUDOSA";
+            const typeClass = isCar ? "type-car" : (isDudosa ? "type-moto" : "type-moto");
+            const typeLabel = isDudosa ? "BAJA CONFIANZA" : (isCar ? "AUTOMOVIL" : "MOTOCICLETA");
+            const municipio = data.municipio || "COLOMBIA";
 
             let alertaHtml = "";
             let infoAntecedentesHtml = "";
+            let alertClass = "card-alert-verde";
 
-            if (data.antecedentes) {
+            if (isDudosa) {
+                alertClass = "card-alert-amarillo";
+                alertaHtml = `<span class="alert-badge badge-yellow"><span class="alert-beacon beacon-yellow"></span>LECTURA DUDOSA (${confPct}%)</span>`;
+                infoAntecedentesHtml = `
+                    <div class="antecedentes-box" style="border-left: 3px solid #FFB300;">
+                        <div style="font-size: 0.72rem; color: #FFB300; font-weight: 600; margin-bottom: 2px;">
+                            DIAGNOSTICO DEL DETECTOR:
+                        </div>
+                        <div style="font-size: 0.70rem; color: #C9D1D9;">
+                            ${data.mensaje_diagnostico || 'Resolución o iluminación insuficiente. Mantén la placa en la pantalla, el sistema está intentando mejorarla en cada cuadro.'}
+                        </div>
+                    </div>
+                `;
+            } else if (data.antecedentes) {
                 const ant = data.antecedentes;
                 const alerta = ant.nivel_alerta || "VERDE";
                 const d = ant.datos || {};
 
                 let badgeClass = "badge-green";
                 let badgeText = "AL DIA - SIN MULTAS";
+                let beaconClass = "beacon-green";
+
                 if (alerta === "AMARILLO") {
                     badgeClass = "badge-yellow";
                     badgeText = "ALERTA SIMIT / SOAT";
+                    beaconClass = "beacon-yellow";
+                    alertClass = "card-alert-amarillo";
                 } else if (alerta === "ROJO") {
                     badgeClass = "badge-red";
                     badgeText = "ALERTA POLICIAL - HURTO";
+                    beaconClass = "beacon-red";
+                    alertClass = "card-alert-rojo";
                 }
 
-                alertaHtml = `<span class="alert-badge ${badgeClass}">${badgeText}</span>`;
+                alertaHtml = `<span class="alert-badge ${badgeClass}"><span class="alert-beacon ${beaconClass}"></span>${badgeText}</span>`;
 
                 const multasTxt = (d.multas_simit && d.multas_simit > 0)
                     ? `${d.multas_simit} ($${Number(d.valor_multas || 0).toLocaleString()} COP)`
@@ -633,7 +1143,7 @@
 
                 let metodoTxt = ant.metodo_usado || 'INDEXADA';
                 if (data.auto_corregido && data.placa_raw_ocr && data.placa_raw_ocr !== data.placa) {
-                    metodoTxt += ` <span style="color:#00E676; font-size:0.7rem;">(OCR: ${data.placa_raw_ocr} → ${data.placa})</span>`;
+                    metodoTxt += ` <span style="color:#00E676; font-size:0.7rem;">(OCR: ${data.placa_raw_ocr} &rarr; ${data.placa})</span>`;
                 }
 
                 infoAntecedentesHtml = `
@@ -655,12 +1165,15 @@
                 `;
             }
 
+            // Aplicar clase de animación reactiva
+            card.className = `plate-card ${alertClass}`;
+
             card.innerHTML = `
-                <div class="plate-card-crop">
+                <div class="plate-card-crop" onclick="abrirModalFotograma('${data.placa}')" title="Haz clic para inspeccionar este fotograma en alta resolucion">
                     ${cropImgHtml}
                 </div>
                 <div class="plate-details">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
                         <div class="colombian-plate-badge">
                             <span class="plate-text-code">${data.placa}</span>
                             <span class="plate-text-municipio">${municipio}</span>
@@ -675,11 +1188,74 @@
                             </div>
                             <span>${confPct}%</span>
                         </div>
-                        <span style="font-family: monospace; font-size: 0.7rem;">${data.timestamp}</span>
+                        <span style="font-family: monospace; font-size: 0.72rem;">${data.timestamp}</span>
                     </div>
                     ${infoAntecedentesHtml}
                 </div>
             `;
+        }
+
+        // Modal para inspeccionar fotogramas guardados
+        function abrirModalFotograma(placa) {
+            const data = registeredPlates.get(placa);
+            if (!data || !data.crop_base64) return;
+
+            document.getElementById("modal-title").innerText = `FOTOGRAMA GUARDADO - PLACA ${data.placa}`;
+            document.getElementById("modal-img").src = `data:image/jpeg;base64,${data.crop_base64}`;
+            document.getElementById("modal-badge").innerHTML = `
+                <span class="colombian-plate-badge" style="padding: 2px 6px;">
+                    <span class="plate-text-code" style="font-size: 1rem;">${data.placa}</span>
+                </span>
+            `;
+            document.getElementById("modal-meta").innerHTML = `
+                <div><strong>Hora de captura:</strong> ${data.timestamp} | <strong>Tipo:</strong> ${data.tipo}</div>
+                <div><strong>Confianza OCR:</strong> ${(data.confianza * 100).toFixed(1)}% | <strong>Municipio:</strong> ${data.municipio || 'COLOMBIA'}</div>
+            `;
+            document.getElementById("crop-modal").style.display = "flex";
+        }
+
+        function cerrarModalFotograma(event) {
+            if (!event || event.target.id === "crop-modal" || event.target.classList.contains("btn-modal-close")) {
+                document.getElementById("crop-modal").style.display = "none";
+            }
+        }
+
+        // Modal de SIMIT
+        async function abrirModalSimit() {
+            try {
+                const res = await fetch("/api/simit_status");
+                const data = await res.json();
+                document.getElementById("simit-provider-lbl").innerText = data.provider + (data.has_api_key ? " (API EN LINEA CONECTADA)" : " (BASE LOCAL SQLITE)");
+                document.getElementById("simit-modal").style.display = "flex";
+            } catch (err) {
+                document.getElementById("simit-modal").style.display = "flex";
+            }
+        }
+
+        function cerrarModalSimit(event) {
+            if (!event || event.target.id === "simit-modal" || event.target.classList.contains("btn-modal-close")) {
+                document.getElementById("simit-modal").style.display = "none";
+            }
+        }
+
+        async function guardarConfiguracionSimit() {
+            const key = document.getElementById("simit-api-key").value.trim();
+            const provider = key ? "VERIFIK" : "LOCAL_DB";
+            try {
+                const res = await fetch("/api/set_simit_provider", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ provider: provider, api_key: key })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert("Configuracion SIMIT actualizada correctamente.");
+                    document.getElementById("btn-simit-status").innerText = key ? "SIMIT: EN LINEA" : "SIMIT: CONECTADO";
+                    cerrarModalSimit();
+                }
+            } catch (err) {
+                alert("Error al guardar configuracion.");
+            }
         }
 
         async function onSourceChange(val) {
@@ -688,7 +1264,7 @@
             if (val === "custom") {
                 const url = prompt("Ingrese la URL del stream (ej. http://192.168.1.15:4747/video):");
                 if (!url) {
-                    document.getElementById("select-source").value = "0";
+                    document.getElementById("select-source").value = "1";
                     return;
                 }
                 target = url;
@@ -703,7 +1279,7 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    lblSource.innerText = "ACTIVO (CAMARA " + data.source + ")";
+                    lblSource.innerText = "ACTIVO (" + data.source + ")";
                 } else {
                     lblSource.innerText = "FALLO (" + data.source + ")";
                     alert("No se pudo iniciar la fuente: " + data.source + ". Verifique que el dispositivo USB o celular este conectado.");
@@ -730,8 +1306,20 @@
 
         async function capturarYConsultar() {
             const btnSnap = document.getElementById("btn-snap");
-            const originalText = btnSnap.innerText;
-            btnSnap.innerText = "PROCESANDO FOTO Y CONSULTANDO ANTECEDENTES...";
+            const originalHtml = btnSnap.innerHTML;
+            btnSnap.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="spin">
+                    <line x1="12" y1="2" x2="12" y2="6"></line>
+                    <line x1="12" y1="18" x2="12" y2="22"></line>
+                    <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+                    <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                    <line x1="2" y1="12" x2="6" y2="12"></line>
+                    <line x1="18" y1="12" x2="22" y2="12"></line>
+                    <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+                    <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                </svg>
+                <span>PROCESANDO FOTO Y CONSULTANDO ANTECEDENTES...</span>
+            `;
             btnSnap.disabled = true;
 
             try {
@@ -745,7 +1333,7 @@
             } catch (err) {
                 alert("Error de comunicacion con el servidor.");
             } finally {
-                btnSnap.innerText = originalText;
+                btnSnap.innerHTML = originalHtml;
                 btnSnap.disabled = false;
             }
         }
@@ -756,6 +1344,10 @@
                 e.preventDefault();
                 capturarYConsultar();
             }
+            if (e.code === "Escape") {
+                cerrarModalFotograma();
+                cerrarModalSimit();
+            }
         });
 
         async function limpiarRegistros() {
@@ -765,7 +1357,7 @@
                 platesContainer.innerHTML = `
                     <div class="empty-state" id="empty-state">
                         <span>SIN DETECCIONES REGISTRADAS</span>
-                        <span style="font-size: 0.75rem;">El sistema registrará automáticamente las placas detectadas.</span>
+                        <span style="font-size: 0.75rem;">El sistema registrará automáticamente las placas y fotogramas detectados.</span>
                     </div>
                 `;
                 registeredPlates.clear();
@@ -805,17 +1397,42 @@
             } catch (err) {}
         }
 
+        async function actualizarListaCamaras() {
+            const select = document.getElementById("select-source");
+            try {
+                const res = await fetch("/api/cameras");
+                const cams = await res.json();
+                if (cams && cams.length > 0) {
+                    const currentVal = select.value;
+                    select.innerHTML = "";
+                    cams.forEach(c => {
+                        const opt = document.createElement("option");
+                        opt.value = c.id;
+                        opt.innerText = "FUENTE: " + c.label.toUpperCase();
+                        select.appendChild(opt);
+                    });
+                    const optCustom = document.createElement("option");
+                    optCustom.value = "custom";
+                    optCustom.innerText = "FUENTE: STREAM IP / DROIDCAM";
+                    select.appendChild(optCustom);
+
+                    if ([...select.options].some(o => o.value === currentVal)) {
+                        select.value = currentVal;
+                    }
+                }
+            } catch (err) {}
+        }
+
         // Cargar registros existentes y estado de la cámara al inicio
         async function loadInitialStatus() {
             try {
+                await actualizarListaCamaras();
                 const res = await fetch("/api/status");
                 const data = await res.json();
                 if (data.source !== undefined) {
                     const sel = document.getElementById("select-source");
                     const srcStr = String(data.source);
-                    if (["0", "1", "2", "3", "file"].includes(srcStr)) {
-                        sel.value = srcStr;
-                    }
+                    sel.value = srcStr;
                     document.getElementById("lbl-source").innerText = "ACTIVO (" + srcStr + ")";
                 }
             } catch (err) {}

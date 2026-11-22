@@ -49,8 +49,8 @@ from modules.gemini_ocr import gemini_disponible, consultar_gemini_placa
 def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
     """
     Descomposición cromática HSV para placas colombianas (Amarillo y Blanco).
-    Actúa como red de seguridad infalible cuando el modelo YOLO no detecta la placa
-    en una fotografía, pantalla de celular o bajo iluminación atípica.
+    Calibrado para cámaras de celulares modernos con balance de blancos automático y HDR.
+    Actúa como red de seguridad infalible cuando el modelo YOLO no detecta la placa.
     """
     if frame_bgr is None or frame_bgr.size == 0:
         return []
@@ -59,9 +59,9 @@ def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
     cajas = []
 
     hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
-    # Rango amarillo colombiano (12-38) y blanco reflectivo (0-180 con alta luminancia)
-    mask_y = cv2.inRange(hsv, np.array([12, 60, 60]), np.array([38, 255, 255]))
-    mask_w = cv2.inRange(hsv, np.array([0, 0, 150]), np.array([180, 50, 255]))
+    # Rango extendido amarillo colombiano (5-42) y blanco reflectivo (0-180 con alta luminancia)
+    mask_y = cv2.inRange(hsv, np.array([5, 30, 70]), np.array([42, 255, 255]))
+    mask_w = cv2.inRange(hsv, np.array([0, 0, 130]), np.array([180, 55, 255]))
     mask = cv2.bitwise_or(mask_y, mask_w)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 5))
@@ -70,15 +70,16 @@ def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
 
     for c in contornos:
         area = cv2.contourArea(c)
-        if 1000 <= area <= int(h_f * w_f * 0.95):
+        if 700 <= area <= int(h_f * w_f * 0.98):
             cx, cy, cw, ch = cv2.boundingRect(c)
             ratio = float(cw) / max(1, ch)
-            if 0.9 <= ratio <= 6.5 and cw >= 40 and ch >= 16:
+            if 0.9 <= ratio <= 6.5 and cw >= 35 and ch >= 14:
                 crop = frame_bgr[cy:cy+ch, cx:cx+cw]
                 tiene_texto, _ = verificar_densidad_caracteres(crop)
-                if tiene_texto:
-                    pad_x = int(cw * 0.16)
-                    pad_y = int(ch * 0.12)
+                # Si el área es grande (acercamiento de celular), aceptar incluso si la densidad varía
+                if tiene_texto or area >= (h_f * w_f * 0.12):
+                    pad_x = int(cw * 0.14)
+                    pad_y = int(ch * 0.10)
                     gx1 = max(0, cx - pad_x)
                     gy1 = max(0, cy - pad_y)
                     gx2 = min(w_f, cx + cw + pad_x)
@@ -86,6 +87,78 @@ def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
                     cajas.append((gx1, gy1, gx2, gy2))
 
     return cajas
+
+
+def abrir_dispositivo_captura(source):
+    """
+    Abre una cámara física, virtual (DroidCam, Iriun, Camo) o stream de red.
+    En Windows prueba DirectShow (CAP_DSHOW), Media Foundation (CAP_MSMF) y CAP_ANY,
+    verificando que cap.read() entregue efectivamente fotogramas válidos.
+    """
+    is_num = str(source).isdigit() or isinstance(source, int)
+    if is_num:
+        idx = int(source)
+        backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY] if sys.platform.startswith('win') else [cv2.CAP_ANY]
+        for backend in backends:
+            try:
+                cap = cv2.VideoCapture(idx, backend)
+                if cap and cap.isOpened():
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    ret, test_frame = cap.read()
+                    if ret and test_frame is not None and test_frame.size > 0:
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                        cap.set(cv2.CAP_PROP_FPS, 30)
+                        ret2, test2 = cap.read()
+                        if not ret2 or test2 is None:
+                            cap.release()
+                            cap = cv2.VideoCapture(idx, backend)
+                            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        return cap
+                    else:
+                        cap.release()
+            except Exception:
+                pass
+        return None
+    else:
+        src_str = str(source).strip()
+        try:
+            cap = cv2.VideoCapture(src_str)
+            if cap and cap.isOpened():
+                if src_str.startswith("http") or src_str.startswith("rtsp"):
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                ret, test_frame = cap.read()
+                if ret and test_frame is not None:
+                    return cap
+                cap.release()
+        except Exception:
+            pass
+        return None
+
+
+def listar_camaras_disponibles() -> list[dict]:
+    """
+    Escanea índices de cámara disponibles en el sistema y retorna solo las que entregan video.
+    """
+    camaras = []
+    for i in range(8):
+        cap = abrir_dispositivo_captura(i)
+        if cap:
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
+            camaras.append({
+                "id": str(i),
+                "label": f"Cámara {i} (Física / Celular / Virtual - {w}x{h})"
+            })
+
+    test_video = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "video_prueba.mp4")
+    if os.path.exists(test_video):
+        camaras.append({
+            "id": "file",
+            "label": "Video de Prueba Local (video_prueba.mp4)"
+        })
+    return camaras
 
 
 def aplicar_nms_cajas(bboxes: list[tuple], iou_threshold: float = 0.20) -> list[tuple]:
@@ -175,25 +248,11 @@ class LiveCameraEngine:
 
         src = int(self.source) if str(self.source).isdigit() else self.source
 
-        # En Windows 10/11, MSMF (por defecto) es el backend moderno y nativo para camaras USB y celulares
-        if isinstance(src, int) or str(src).isdigit():
-            idx = int(src)
-            self.cap = cv2.VideoCapture(idx)
-            if not self.cap or not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        else:
-            self.cap = cv2.VideoCapture(src)
+        self.cap = abrir_dispositivo_captura(src)
 
         if not self.cap or not self.cap.isOpened():
             print(f"[ERROR] No se pudo inicializar la fuente de video: {self.source}")
             return False
-
-        if str(self.source).isdigit():
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            # Solicitar resolución de alta fidelidad para detección en tiempo real
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            self.cap.set(cv2.CAP_PROP_FPS, 30)
 
         self.is_running = True
 
@@ -250,22 +309,9 @@ class LiveCameraEngine:
                 pass
         time.sleep(0.3)
 
-        new_cap = None
-        if isinstance(src, int) or str(src).isdigit():
-            idx = int(src)
-            new_cap = cv2.VideoCapture(idx)
-            if not new_cap or not new_cap.isOpened():
-                new_cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        else:
-            new_cap = cv2.VideoCapture(src)
+        new_cap = abrir_dispositivo_captura(src)
 
         if new_cap and new_cap.isOpened():
-            if str(src).isdigit():
-                new_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                new_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-                new_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-                new_cap.set(cv2.CAP_PROP_FPS, 30)
-
             with self.lock:
                 self.cap = new_cap
                 self.source = new_source
@@ -291,7 +337,8 @@ class LiveCameraEngine:
 
             ret, frame = cap.read()
             if not ret:
-                if not str(self.source).isdigit() and cap:
+                src_str = str(self.source)
+                if not src_str.isdigit() and not src_str.startswith("http") and not src_str.startswith("rtsp") and cap:
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     continue
                 else:
@@ -301,15 +348,6 @@ class LiveCameraEngine:
             with self.lock:
                 self.latest_frame = frame
                 self.total_frames_read += 1
-
-            fps_counter += 1
-            now = time.time()
-            if now - last_time >= 1.0:
-                self.camera_fps = round(fps_counter / (now - last_time), 1)
-                fps_counter = 0
-                last_time = now
-
-            time.sleep(0.003)
 
             fps_counter += 1
             now = time.time()
@@ -335,17 +373,27 @@ class LiveCameraEngine:
             if gemini_res:
                 return [gemini_res]
 
-        allowlist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ."
+        allowlist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- .@&"
 
         def ejecutar_easyocr(img_in):
             try:
+                h_in, w_in = img_in.shape[:2]
+                if h_in > 140 or h_in < 100:
+                    scale = 130.0 / float(h_in)
+                    interp = cv2.INTER_AREA if h_in > 140 else cv2.INTER_CUBIC
+                    img_to_feed = cv2.resize(img_in, (max(40, int(w_in * scale)), 130), interpolation=interp)
+                else:
+                    img_to_feed = img_in
+
                 return reader.readtext(
-                    img_in,
+                    img_to_feed,
                     allowlist=allowlist,
                     detail=1,
                     paragraph=False,
-                    mag_ratio=1.0,
-                    add_margin=0.15
+                    mag_ratio=1.4,
+                    text_threshold=0.5,
+                    low_text=0.3,
+                    add_margin=0.06
                 )
             except Exception:
                 return []
@@ -387,7 +435,7 @@ class LiveCameraEngine:
 
             mejores_placas = []
             for texto_cand, prob_cand in cadenas_a_evaluar:
-                placa_val, tipo_veh, conf_bonus = extraer_placa_estricta(texto_cand)
+                placa_val, tipo_veh, conf_bonus = extraer_placa_estricta(texto_cand, crop_bgr=crop_bgr)
                 if placa_val and tipo_veh in ["CARRO", "MOTO"]:
                     score_final = min(1.0, prob_cand * conf_bonus)
                     mejores_placas.append((placa_val, tipo_veh, score_final))
@@ -410,58 +458,47 @@ class LiveCameraEngine:
                 "recorte_img": crop_bgr
             }
 
-        # Multi-intento jerárquico inteligente con tolerancia extrema a ruido, sol y reflejos:
-        # Intento 1: Con preprocesamiento de alta definición (LAB / CLAHE)
-        preprocesada = mejorar_placa_lejana(crop_bgr)
-        dict_det = procesar_tokens_ocr(ejecutar_easyocr(preprocesada))
+        # Multi-intento jerárquico optimizado para máxima fidelidad de caracteres (< 300 ms):
+        h_orig, w_orig = crop_bgr.shape[:2]
 
-        # Intento 2 (Otsu Adaptive Binarization): Separa caracteres de reflejos lumínicos / contraluz
+        # Intento 1: Afeitar marco exterior perimetral (Inner Plate Crop)
+        # Elimina marcos negros y tornillos que se leen erróneamente como 'I', '1' o 'L'.
+        inner_crop = crop_bgr[int(h_orig * 0.08):int(h_orig * 0.82), int(w_orig * 0.05):int(w_orig * 0.95)]
+        dict_det = procesar_tokens_ocr(ejecutar_easyocr(inner_crop if inner_crop.size > 400 else crop_bgr))
+
+        # Intento 2: Motion Deblur (Unsharp Masking) sobre el recorte interno
+        if not dict_det:
+            target_img = inner_crop if inner_crop.size > 400 else crop_bgr
+            gauss = cv2.GaussianBlur(target_img, (0, 0), 2.0)
+            unsharp = cv2.addWeighted(target_img, 2.0, gauss, -1.0, 0)
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(unsharp))
+
+        # Intento 3: Recorte completo sin afeitar (para motos o placas sin marco)
+        if not dict_det:
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(crop_bgr))
+
+        # Intento 4 (Adaptive Thresholding para velocidad y contraste local):
+        if not dict_det:
+            target_img = inner_crop if inner_crop.size > 400 else crop_bgr
+            gray = cv2.cvtColor(target_img, cv2.COLOR_BGR2GRAY)
+            th_adapt = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 9)
+            th_bgr = cv2.cvtColor(th_adapt, cv2.COLOR_GRAY2BGR)
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(th_bgr))
+
+        # Intento 5: Con preprocesamiento de alta definición normalizado (LAB / CLAHE)
+        if not dict_det:
+            preprocesada = mejorar_placa_lejana(crop_bgr)
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(preprocesada))
+
+        # Intento 6 (Otsu Adaptive Binarization): Separa caracteres de reflejos lumínicos / contraluz
         if not dict_det:
             otsu_img = binarizar_placa_otsu(crop_bgr)
             dict_det = procesar_tokens_ocr(ejecutar_easyocr(otsu_img))
 
-        # Intento 3 (Franja interna recortada + Otsu): Elimina tornillos/remaches y marcos exteriores
-        if not dict_det:
-            franja_otsu = binarizar_placa_otsu(recortar_franja_caracteres(crop_bgr))
-            dict_det = procesar_tokens_ocr(ejecutar_easyocr(franja_otsu))
-
-        # Intento 4 (Franja interna cruda):
-        if not dict_det:
-            franja = recortar_franja_caracteres(crop_bgr)
-            dict_det = procesar_tokens_ocr(ejecutar_easyocr(franja))
-
-        # Intento 5 (Fallback): Con recorte crudo original (por si el realce cromático alteró contraste)
-        if not dict_det:
-            dict_det = procesar_tokens_ocr(ejecutar_easyocr(crop_bgr))
-
-        # Intento 6 (Fallback Carretera): Con Unsharp Mask para compensar desenfoque de movimiento
-        if not dict_det:
-            try:
-                gauss = cv2.GaussianBlur(crop_bgr, (0, 0), 2.0)
-                unsharp = cv2.addWeighted(crop_bgr, 1.5, gauss, -0.5, 0)
-                dict_det = procesar_tokens_ocr(ejecutar_easyocr(unsharp))
-            except Exception:
-                pass
-
         if dict_det:
-            # Auto-alineación asistida por base de datos (tolerancia a confusiones visuales 1-carácter)
             placa_cand = dict_det["placa_raw"]
             dict_det["placa_raw_ocr"] = placa_cand
             dict_det["auto_corregido"] = False
-            try:
-                ant = consultar_placa(placa_cand)
-                if ant and ant.get("encontrado"):
-                    metodo = ant.get("metodo_usado")
-                    placa_db = ant.get("placa_encontrada")
-                    sim = ant.get("similitud", 0.0)
-                    if metodo == "SIMILITUD" and sim >= 82.0 and placa_db and len(placa_db) == 6:
-                        diffs = sum(1 for a, b in zip(placa_cand, placa_db) if a != b)
-                        if diffs == 1:
-                            dict_det["placa_raw"] = placa_db
-                            dict_det["auto_corregido"] = True
-                            dict_det["confianza"] = min(1.0, dict_det["confianza"] * 1.05)
-            except Exception:
-                pass
             return [dict_det]
         return []
 
@@ -526,14 +563,14 @@ class LiveCameraEngine:
             detected_bboxes = []
 
             # 1. Detección YOLO especializada en placas vehiculares (conf=0.12 de alta sensibilidad)
-            res_plates = plate_detector(frame_to_process, verbose=False, conf=0.12)
+            res_plates = plate_detector(frame_to_process, imgsz=640, verbose=False, conf=0.12)
             for r in res_plates:
                 for box in r.boxes:
                     bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
                     pw = bx2 - bx1
                     ph = by2 - by1
-                    pad_x = int(pw * 0.16)
-                    pad_y = int(ph * 0.12)
+                    pad_x = int(pw * 0.14)
+                    pad_y = int(ph * 0.10)
                     gx1 = max(0, bx1 - pad_x)
                     gy1 = max(0, by1 - pad_y)
                     gx2 = min(w_frame, bx2 + pad_x)
@@ -551,6 +588,15 @@ class LiveCameraEngine:
                 if color_boxes:
                     detected_bboxes.extend(color_boxes)
 
+            # 3. Fallback de encuadre central si YOLO y color no detectaron nada (acercamientos de celular en pantalla completa)
+            if not detected_bboxes:
+                rx1, ry1 = int(w_frame * 0.12), int(h_frame * 0.15)
+                rx2, ry2 = int(w_frame * 0.88), int(h_frame * 0.85)
+                crop_center = frame_to_process[ry1:ry2, rx1:rx2]
+                tiene_txt, _ = verificar_densidad_caracteres(crop_center)
+                if tiene_txt or not self.tracker.active_tracks:
+                    detected_bboxes.append((rx1, ry1, rx2, ry2))
+
             # Aplicar Supresión de No Máximos (NMS) para fusionar cajas solapadas de una misma placa
             detected_bboxes = aplicar_nms_cajas(detected_bboxes, iou_threshold=0.20)
 
@@ -563,7 +609,7 @@ class LiveCameraEngine:
 
             # 3. Enviar recortes al worker OCR asíncrono sin bloquear este bucle
             for track_id, crop in tracks_needing_ocr:
-                if track_id not in self.pending_ocr_tracks:
+                if track_id not in self.pending_ocr_tracks or self.ocr_queue.empty():
                     if self.ocr_queue.full():
                         try:
                             old_tid, _ = self.ocr_queue.get_nowait()

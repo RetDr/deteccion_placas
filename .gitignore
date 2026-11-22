@@ -17,6 +17,8 @@ env/
 *.pem
 
 # Cache y archivos de configuración en tiempo de ejecución
+scratch*.py
+scratch/
 models/ultralytics/
 models/easyocr/*.pth
 .pytest_cache/

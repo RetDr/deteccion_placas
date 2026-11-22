@@ -21,6 +21,12 @@ from modules.database import (
     poblar_datos_prueba
 )
 
+# Integración con el conector oficial SIMIT (datos.gov.co)
+try:
+    from modules.simit_connector import consultar_simit
+except ImportError:
+    consultar_simit = None
+
 # Expresiones regulares oficiales de Colombia
 PATRON_CARRO = re.compile(r'^[A-Z]{3}[0-9]{3}$')
 PATRON_MOTO = re.compile(r'^[A-Z]{3}[0-9]{2}[A-Z]$')
@@ -32,7 +38,9 @@ CONFUSION_OCR = {
     'S': '5', '5': 'S',
     'Z': '2', '2': 'Z',
     'A': '4', '4': 'A',
-    'G': '6', '6': 'G'
+    'G': '6', '6': 'G',
+    'Q': 'O', 'O': 'Q',
+    'Q': '0', '0': 'Q'
 }
 
 
@@ -92,6 +100,14 @@ def buscar_por_similitud(placa_busqueda: str, umbral: float = 82.0) -> tuple[dic
 
     for cand in todas_placas:
         score = fuzz.ratio(placa_busqueda, cand)
+        # Bonus especial si la única discrepancia es una confusión típica Q <-> O, B <-> 8 o O <-> 0
+        if len(placa_busqueda) == 6 and len(cand) == 6:
+            diffs = [(a, b) for a, b in zip(placa_busqueda, cand) if a != b]
+            if len(diffs) == 1:
+                c1, c2 = diffs[0]
+                if (c1 in ('Q', 'O') and c2 in ('Q', 'O')) or (c1 in ('B', '8') and c2 in ('B', '8')) or (c1 in ('0', 'O') and c2 in ('0', 'O')):
+                    score = max(score, 95.0)
+
         if score > mejor_similitud:
             mejor_similitud = score
             mejor_placa = cand
@@ -129,6 +145,16 @@ def consultar_placa(placa_raw: str) -> dict:
     # 2. Capa 2: Búsqueda Indexada (Exacta)
     datos_exactos = buscar_por_placa_indexada(placa_limpia)
     if datos_exactos:
+        # Si no tiene multas registradas localmente o están en 0, verificamos en SIMIT en vivo
+        if consultar_simit and datos_exactos.get("multas_simit", 0) == 0:
+            try:
+                res_simit = consultar_simit(placa_limpia)
+                if res_simit and res_simit.get("multas_count", 0) > 0:
+                    datos_exactos["multas_simit"] = res_simit["multas_count"]
+                    datos_exactos["valor_multas"] = res_simit.get("valor_total", 0)
+                    datos_exactos["detalle_multas"] = res_simit.get("detalle", f"{res_simit['multas_count']} multas pendientes en SIMIT")
+            except Exception:
+                pass
         alerta = calcular_nivel_alerta(datos_exactos)
         return {
             "placa_consultada": placa_limpia,
@@ -156,7 +182,53 @@ def consultar_placa(placa_raw: str) -> dict:
             "mensaje": f"Coincidencia difusa ({score_similitud:.0f}% similitud con {datos_similares['placa']})."
         }
 
-    # No registrado en base de datos de antecedentes
+    # No registrado en base de datos de antecedentes locales
+    # Verificamos si existe en el conector SIMIT en vivo (datos.gov.co)
+    datos_base = {
+        "placa": placa_limpia,
+        "tipo": tipo_veh,
+        "marca": "NO REGISTRADO EN ANTECEDENTES",
+        "linea": "Vehículo no censado en base policial",
+        "modelo": 0,
+        "color": "DESCONOCIDO",
+        "propietario": "SIN REGISTRO POLICIAL",
+        "cedula_propietario": "N/A",
+        "municipio_registro": "COLOMBIA",
+        "multas_simit": 0,
+        "valor_multas": 0,
+        "detalle_multas": "Sin registros en base de datos",
+        "soat_vigente": 1,
+        "soat_vencimiento": "N/A",
+        "tecnomecanica_vigente": 1,
+        "tecnomecanica_vencimiento": "N/A",
+        "reporte_hurto": 0,
+        "orden_inmovilizacion": 0,
+        "observaciones": "Placa detectada pero no figura en base de datos local."
+    }
+
+    if consultar_simit:
+        try:
+            res_simit = consultar_simit(placa_limpia)
+            if res_simit and res_simit.get("multas_count", 0) > 0:
+                datos_base["multas_simit"] = res_simit["multas_count"]
+                datos_base["valor_multas"] = res_simit.get("valor_total", 0)
+                datos_base["detalle_multas"] = res_simit.get("detalle", f"SIMIT: {res_simit['multas_count']} pendientes")
+                datos_base["observaciones"] = f"Posee {res_simit['multas_count']} infracciones pendientes en SIMIT."
+                return {
+                    "placa_consultada": placa_limpia,
+                    "placa_encontrada": placa_limpia,
+                    "metodo_usado": "SIMIT_EN_VIVO",
+                    "encontrado": True,
+                    "nivel_alerta": "AMARILLO",
+                    "similitud": 100.0,
+                    "datos": datos_base,
+                    "mensaje": f"Infracciones detectadas en SIMIT: {res_simit['multas_count']} comparendo(s) pendiente(s)."
+                }
+            elif res_simit and res_simit.get("multas_historial_total", 0) > 0:
+                datos_base["detalle_multas"] = f"SIMIT: {res_simit['multas_historial_total']} multas históricas (Paz y Salvo)"
+        except Exception:
+            pass
+
     return {
         "placa_consultada": placa_limpia,
         "placa_encontrada": None,
@@ -164,27 +236,7 @@ def consultar_placa(placa_raw: str) -> dict:
         "encontrado": False,
         "nivel_alerta": "VERDE",
         "similitud": 0.0,
-        "datos": {
-            "placa": placa_limpia,
-            "tipo": tipo_veh,
-            "marca": "NO REGISTRADO EN ANTECEDENTES",
-            "linea": "Vehículo no censado en base local",
-            "modelo": 0,
-            "color": "DESCONOCIDO",
-            "propietario": "SIN REGISTRO POLICIAL",
-            "cedula_propietario": "N/A",
-            "municipio_registro": "COLOMBIA",
-            "multas_simit": 0,
-            "valor_multas": 0,
-            "detalle_multas": "Sin registros en base de datos",
-            "soat_vigente": 1,
-            "soat_vencimiento": "N/A",
-            "tecnomecanica_vigente": 1,
-            "tecnomecanica_vencimiento": "N/A",
-            "reporte_hurto": 0,
-            "orden_inmovilizacion": 0,
-            "observaciones": "Placa detectada pero no figura en base de datos local."
-        },
+        "datos": datos_base,
         "mensaje": "Placa no encontrada en la base de datos de antecedentes."
     }
 

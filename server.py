@@ -30,7 +30,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
-from modules.camera_stream import LiveCameraEngine, detectar_placas_por_color, aplicar_nms_cajas
+from modules.camera_stream import LiveCameraEngine, detectar_placas_por_color, aplicar_nms_cajas, listar_camaras_disponibles
 from modules.vision_ocr import obtener_modelos
 from modules.search_engine import consultar_placa
 from modules.gemini_ocr import gemini_disponible, guardar_gemini_key, obtener_gemini_key, consultar_gemini_placa
@@ -159,6 +159,13 @@ async def get_status():
     })
 
 
+@app.get("/api/cameras")
+async def get_available_cameras():
+    """Retorna la lista de dispositivos de cámara físicos, virtuales (DroidCam, Iriun) o de archivo."""
+    cams = listar_camaras_disponibles()
+    return JSONResponse(cams)
+
+
 @app.post("/api/toggle_roi")
 async def toggle_roi():
     engine.use_roi = not engine.use_roi
@@ -178,14 +185,14 @@ async def capture_frame():
     cajas = []
 
     # 1. Detección YOLO
-    res = plate_detector(frame, verbose=False, conf=0.15)
+    res = plate_detector(frame, imgsz=640, verbose=False, conf=0.12)
     for r in res:
         for box in r.boxes:
             bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
             pw = bx2 - bx1
             ph = by2 - by1
-            pad_x = int(pw * 0.16)
-            pad_y = int(ph * 0.12)
+            pad_x = int(pw * 0.14)
+            pad_y = int(ph * 0.10)
             cajas.append((max(0, bx1 - pad_x), max(0, by1 - pad_y), min(w_f, bx2 + pad_x), min(h_f, by2 + pad_y)))
 
     # 2. Fallback por descomposición de color HSV si YOLO no detectó nada
@@ -200,41 +207,83 @@ async def capture_frame():
 
     # Filtrar cajas con NMS
     cajas = aplicar_nms_cajas(cajas, iou_threshold=0.20)
-    rx1, ry1, rx2, ry2 = cajas[0]
-    crop = frame[ry1:ry2, rx1:rx2]
 
-    # Ejecutar OCR (Gemini si está configurado, o EasyOCR local)
     det = None
-    if gemini_disponible():
-        det = consultar_gemini_placa(crop)
+    mejor_crop = None
+    mejor_bbox = None
 
-    if not det:
-        ocr_res = engine._ejecutar_ocr_en_recorte(crop, reader)
-        if ocr_res:
-            det = ocr_res[0]
+    # Evaluar candidatos hasta encontrar la placa con mayor confianza
+    for (rx1, ry1, rx2, ry2) in cajas[:4]:
+        c_cand = frame[ry1:ry2, rx1:rx2]
+        if c_cand.size < 400:
+            continue
+        det_cand = None
+        if gemini_disponible():
+            det_cand = consultar_gemini_placa(c_cand)
+        if not det_cand:
+            ocr_res = engine._ejecutar_ocr_en_recorte(c_cand, reader)
+            if ocr_res:
+                det_cand = ocr_res[0]
+        if det_cand and det_cand.get("placa_raw") and det_cand["placa_raw"] != "DESCONOCIDO":
+            if det is None or det_cand.get("confianza", 0) > det.get("confianza", 0):
+                det = det_cand
+                mejor_crop = c_cand
+                mejor_bbox = (rx1, ry1, rx2, ry2)
 
-    if not det or not det.get("placa_raw") or det["placa_raw"] == "DESCONOCIDO":
-        return JSONResponse({"success": False, "error": "No se pudo leer la placa con claridad en esta toma. Acerca la placa o ajusta la iluminación."})
+    # Si no se leyó una placa definitiva, igual devolver el mejor encuadre con métrica de diagnóstico
+    if not det or mejor_crop is None:
+        primer_caja = cajas[0] if cajas else (int(w_f * 0.15), int(h_f * 0.20), int(w_f * 0.85), int(h_f * 0.80))
+        cx1, cy1, cx2, cy2 = primer_caja
+        crop_duda = frame[cy1:cy2, cx1:cx2] if frame[cy1:cy2, cx1:cx2].size > 100 else frame
+        ret, buf = cv2.imencode('.jpg', crop_duda, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        b64_crop_duda = base64.b64encode(buf).decode('utf-8') if ret else ""
+        
+        # Calcular si hubo algún texto parcial o qué confianza estimó el detector
+        conf_estimada = 0.25 if len(cajas) > 0 else 0.10
+        payload_duda = {
+            "track_id": int(time.time()),
+            "placa": "DUDOSA",
+            "placa_raw_ocr": "???",
+            "auto_corregido": False,
+            "tipo": "INDEFINIDO",
+            "municipio": "COLOMBIA",
+            "confianza": conf_estimada,
+            "hits": 1,
+            "timestamp": time.strftime("%H:%M:%S"),
+            "crop_base64": b64_crop_duda,
+            "bbox": primer_caja,
+            "es_dudosa": True,
+            "mensaje_diagnostico": f"Detector ubicó placa pero el OCR obtuvo confianza insuficiente ({conf_estimada*100:.0f}%). Mantén la placa visible para mejorar la resolución.",
+            "antecedentes": {
+                "nivel_alerta": "AMARILLO",
+                "mensaje": f"Confianza de lectura muy baja ({conf_estimada*100:.0f}%). Ajusta la cámara o mantén la placa en encuadre.",
+                "metodo_usado": "LECTURA_BAJA_CONFIANZA",
+                "datos": {
+                    "placa": "LECTURA_DUDOSA",
+                    "marca": "RESOLUCION INSUFICIENTE",
+                    "linea": "El detector está buscando mejorar este fotograma",
+                    "multas_simit": 0,
+                    "valor_multas": 0,
+                    "soat_vigente": 1,
+                    "observaciones": "Mantén la placa en la pantalla. El motor intentará mejorarla en los siguientes cuadros."
+                }
+            }
+        }
+        engine._notify_listeners({"event": "NEW_PLATE", "data": payload_duda})
+        return {"success": True, "data": payload_duda}
+
+    crop = mejor_crop
+    rx1, ry1, rx2, ry2 = mejor_bbox
 
     placa = det["placa_raw"]
     tipo = det.get("tipo", "CARRO")
     mun = det.get("municipio", "COLOMBIA")
 
-    # Antecedentes policiales y de tránsito con auto-alineación por similitud
+    # Antecedentes policiales y de tránsito sin alterar los caracteres detectados
     ant = consultar_placa(placa)
     placa_a_mostrar = placa
     placa_raw_ocr = det.get("placa_raw_ocr", placa)
-    auto_corregido = det.get("auto_corregido", False)
-
-    if ant and ant.get("encontrado"):
-        metodo = ant.get("metodo_usado")
-        placa_db = ant.get("placa_encontrada")
-        sim = ant.get("similitud", 0.0)
-        if metodo == "SIMILITUD" and sim >= 82.0 and placa_db and len(placa_db) == 6:
-            diffs = sum(1 for a, b in zip(placa, placa_db) if a != b)
-            if diffs == 1:
-                placa_a_mostrar = placa_db
-                auto_corregido = True
+    auto_corregido = False
 
     # Base64 del recorte
     ret, buf = cv2.imencode('.jpg', crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -274,6 +323,32 @@ async def get_antecedentes(placa: str):
     from modules.search_engine import consultar_placa
     res = consultar_placa(placa)
     return JSONResponse(res)
+
+
+@app.get("/api/simit/{placa}")
+async def get_simit(placa: str):
+    """Consulta comparendos y estado en SIMIT (Local o API Externa)."""
+    from modules.simit_connector import consultar_simit
+    return JSONResponse(consultar_simit(placa))
+
+
+@app.get("/api/simit_status")
+async def get_simit_status():
+    from modules.simit_connector import obtener_estado_simit
+    return JSONResponse(obtener_estado_simit())
+
+
+class SimitConfigRequest(BaseModel):
+    provider: str
+    api_key: str = ""
+    endpoint_url: str = ""
+
+
+@app.post("/api/set_simit_provider")
+async def set_simit_provider(req: SimitConfigRequest):
+    from modules.simit_connector import configurar_proveedor_simit
+    ok = configurar_proveedor_simit(req.provider, req.api_key, req.endpoint_url)
+    return {"success": ok}
 
 
 class VehicleRecord(BaseModel):

@@ -57,9 +57,9 @@ def son_la_misma_placa(boxA, boxB) -> bool:
     3. Contención relativa (IoMin >= 0.35)
     Elimina duplicados y evita que aparezcan 2 o 3 recuadros verdes en la misma placa.
     """
-    if calcular_iou(boxA, boxB) >= 0.15:
+    if calcular_iou(boxA, boxB) >= 0.12:
         return True
-    if calcular_distancia_centros_normalizada(boxA, boxB) <= 0.40:
+    if calcular_distancia_centros_normalizada(boxA, boxB) <= 0.55:
         return True
     ax1, ay1, ax2, ay2 = boxA
     bx1, by1, bx2, by2 = boxB
@@ -93,7 +93,7 @@ class TrackedPlate:
         self.invisible_frames = 0
         self.hits = 1
 
-        self.readings = [self.placa_raw] if (self.placa_raw != "DESCONOCIDO" and len(self.placa_raw) == 6) else []
+        self.readings = [self.placa_raw] if (self.placa_raw != "DESCONOCIDO" and len(self.placa_raw) == 6 and self.confianza >= 0.40) else []
         self.has_been_emitted = False
         self.last_emitted_time = 0.0
         self._cached_antecedentes = None
@@ -101,6 +101,7 @@ class TrackedPlate:
         # Almacenamiento del fotograma de mayor nitidez (Best-Shot Buffer contra desenfoque de movimiento)
         self.best_crop = self.recorte_img
         self.best_sharpness = 0.0
+        self.last_ocr_sharpness = 0.0
         if self.recorte_img is not None and self.recorte_img.size > 400:
             try:
                 g = cv2.cvtColor(self.recorte_img, cv2.COLOR_BGR2GRAY)
@@ -138,13 +139,15 @@ class TrackedPlate:
             self.invisible_frames = 0
             self.hits += 1
 
-        # Evaluar nitidez del fotograma para sustituir por la toma más nítida
+        # Evaluar nitidez y resolución del fotograma para sustituir por la toma más nítida (Best-Shot contra movimiento)
         if new_crop is not None and new_crop.size > 400:
             try:
                 g = cv2.cvtColor(new_crop, cv2.COLOR_BGR2GRAY)
                 sharpness = float(cv2.Laplacian(g, cv2.CV_64F).var())
-                if sharpness > self.best_sharpness:
-                    self.best_sharpness = sharpness
+                h_c, w_c = new_crop.shape[:2]
+                quality = sharpness * ((w_c * h_c) ** 0.5)
+                if quality > self.best_sharpness:
+                    self.best_sharpness = quality
                     self.best_crop = new_crop.copy()
             except Exception:
                 pass
@@ -155,15 +158,16 @@ class TrackedPlate:
         self.placa_raw_ocr = new_det.get("placa_raw_ocr", nueva_placa)
         self.auto_corregido = new_det.get("auto_corregido", False)
 
-        if nueva_placa and nueva_placa != "DESCONOCIDO" and len(nueva_placa) == 6:
+        if nueva_placa and nueva_placa != "DESCONOCIDO" and len(nueva_placa) == 6 and nueva_conf >= 0.40:
             if nueva_placa != self.placa_raw:
                 self._cached_antecedentes = None
             self.readings.append(nueva_placa)
             # Votación por mayoría temporal entre las lecturas acumuladas (elimina glitches aislados)
             placa_consenso, veces = Counter(self.readings).most_common(1)[0]
             self.placa_raw = placa_consenso
+            self.last_ocr_sharpness = self.best_sharpness
 
-        if nueva_conf >= self.confianza or self.placa_raw != "DESCONOCIDO":
+        if (nueva_conf >= self.confianza or self.placa_raw == "DESCONOCIDO") and nueva_conf >= 0.35:
             self.confianza = max(self.confianza, nueva_conf)
             if new_det.get("tipo"):
                 self.tipo = new_det["tipo"]
@@ -175,10 +179,10 @@ class TrackedPlate:
 
     @property
     def is_confirmed(self):
-        # Confirmación inmediata al validar sintaxis estricta colombiana (6 caracteres) y confianza >= 0.28
+        # Confirmación inmediata al validar sintaxis estricta colombiana (6 caracteres) y confianza >= 0.40
         if not self.placa_raw or self.placa_raw == "DESCONOCIDO" or len(self.placa_raw) != 6:
             return False
-        return len(self.readings) >= 1 and self.confianza >= 0.28
+        return len(self.readings) >= 1 and self.confianza >= 0.40
 
     def to_dict(self):
         if self._cached_antecedentes is None and self.placa_raw != "DESCONOCIDO":
@@ -205,7 +209,7 @@ class TrackedPlate:
 
 
 class RealtimePlateTracker:
-    def __init__(self, iou_threshold=0.20, max_invisible_frames=30, deduplication_window_sec=8.0, persistence_path=None):
+    def __init__(self, iou_threshold=0.18, max_invisible_frames=50, deduplication_window_sec=8.0, persistence_path=None):
         self.iou_threshold = iou_threshold
         self.max_invisible_frames = max_invisible_frames
         self.deduplication_window_sec = deduplication_window_sec
@@ -242,23 +246,13 @@ class RealtimePlateTracker:
 
     def _es_placa_reciente(self, placa: str, now: float) -> bool:
         """
-        Verifica si la placa ya fue registrada recientemente en la ventana de 10s.
-        Incluye tolerancia a distancia de Levenshtein <= 1 (ej: ABC123 vs ABC128)
-        para evitar que ligeras variaciones de OCR creen tarjetas separadas.
+        Verifica si la placa ya fue registrada recientemente en la ventana de deduplicación.
+        Evita duplicados exactos en el historial sin bloquear placas distintas que difieran en 1 letra (ej: DKQ98D vs DKO98D).
         """
         if not placa or placa == "DESCONOCIDO" or len(placa) != 6:
             return True
 
-        if placa in self.recent_seen_plates:
-            return True
-
-        for p_reg in self.recent_seen_plates:
-            if len(p_reg) == 6:
-                diffs = sum(1 for c1, c2 in zip(p_reg, placa) if c1 != c2)
-                if diffs <= 1:
-                    return True
-
-        return False
+        return placa in self.recent_seen_plates
 
     def apply_async_ocr(self, track_id: int, ocr_det: dict) -> list[dict]:
         """
@@ -279,8 +273,9 @@ class RealtimePlateTracker:
             if track:
                 track.update_ocr(ocr_det)
 
-            # Si se identificó una placa válida de 6 caracteres
-            if placa and placa != "DESCONOCIDO" and len(placa) == 6:
+            # Si se identificó una placa válida de 6 caracteres con confianza suficiente (>= 40%)
+            conf_val = float(ocr_det.get("confianza", 0.0))
+            if placa and placa != "DESCONOCIDO" and len(placa) == 6 and conf_val >= 0.40:
                 is_new = not self._es_placa_reciente(placa, now)
                 self.recent_seen_plates[placa] = now
                 payload = track.to_dict() if track else {
@@ -344,7 +339,8 @@ class RealtimePlateTracker:
                     iou = calcular_iou(det_box, track.bbox)
                     dist_norm = calcular_distancia_centros_normalizada(det_box, track.bbox)
 
-                    if iou >= self.iou_threshold or dist_norm <= 0.45 or son_la_misma_placa(det_box, track.bbox):
+                    # Tolerancia ampliada para vehículos en movimiento rápido (hasta dist_norm 0.80)
+                    if iou >= self.iou_threshold or dist_norm <= 0.80 or son_la_misma_placa(det_box, track.bbox):
                         score = max(iou, 1.0 - dist_norm)
                         if score > best_score:
                             best_score = score
@@ -357,15 +353,24 @@ class RealtimePlateTracker:
                     crop = frame_bgr[ry1:ry2, rx1:rx2] if frame_bgr is not None else None
                     track.update_position(det_box, crop)
 
-                    # Si aún no está confirmada, programar o ejecutar OCR usando la toma fresca o más nítida
-                    if not track.is_confirmed and crop is not None and crop.size > 0:
-                        crop_to_send = crop if (crop is not None and crop.size > 400) else (track.best_crop if track.best_crop is not None else crop)
-                        if run_ocr_func is not None:
-                            ocr_res = run_ocr_func(crop_to_send)
-                            if ocr_res:
-                                track.update_ocr(ocr_res[0])
-                        else:
-                            tracks_needing_ocr.append((track.track_id, crop_to_send))
+                    # Programar OCR usando la toma de mayor nitidez (Best-Shot):
+                    # 1. Si aún no está confirmada
+                    # 2. O si ya está confirmada pero la nitidez aumentó significativamente (>25%) y la confianza es mejorable (<0.85)
+                    necesita_ocr = False
+                    if not track.is_confirmed:
+                        necesita_ocr = True
+                    elif track.confianza < 0.85 and track.best_sharpness > 1.25 * max(1.0, getattr(track, "last_ocr_sharpness", 0.0)):
+                        necesita_ocr = True
+
+                    if necesita_ocr:
+                        crop_to_send = track.best_crop if (track.best_crop is not None and track.best_crop.size > 400) else crop
+                        if crop_to_send is not None and crop_to_send.size > 400:
+                            if run_ocr_func is not None:
+                                ocr_res = run_ocr_func(crop_to_send)
+                                if ocr_res:
+                                    track.update_ocr(ocr_res[0])
+                            else:
+                                tracks_needing_ocr.append((track.track_id, crop_to_send))
 
                     # Si ya está confirmada y no se ha emitido, emitir evento inmediatamente
                     if track.is_confirmed and not track.has_been_emitted:
