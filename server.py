@@ -30,7 +30,7 @@ from modules.gemini_ocr import gemini_disponible, guardar_gemini_key, obtener_ge
 # Inicializar motor de captura asíncrono
 # Por defecto inicia con la cámara web 0 (o video de prueba si no hay cámara)
 default_source = 0
-engine = LiveCameraEngine(source=default_source, sampling_step=4, min_confidence=0.45)
+engine = LiveCameraEngine(source=default_source, sampling_step=4, min_confidence=0.28)
 
 # Administrador de conexiones WebSocket activas
 connected_websockets: list[WebSocket] = []
@@ -212,8 +212,21 @@ async def capture_frame():
     tipo = det.get("tipo", "CARRO")
     mun = det.get("municipio", "COLOMBIA")
 
-    # Antecedentes policiales y de tránsito
+    # Antecedentes policiales y de tránsito con auto-alineación por similitud
     ant = consultar_placa(placa)
+    placa_a_mostrar = placa
+    placa_raw_ocr = det.get("placa_raw_ocr", placa)
+    auto_corregido = det.get("auto_corregido", False)
+
+    if ant and ant.get("encontrado"):
+        metodo = ant.get("metodo_usado")
+        placa_db = ant.get("placa_encontrada")
+        sim = ant.get("similitud", 0.0)
+        if metodo == "SIMILITUD" and sim >= 82.0 and placa_db and len(placa_db) == 6:
+            diffs = sum(1 for a, b in zip(placa, placa_db) if a != b)
+            if diffs == 1:
+                placa_a_mostrar = placa_db
+                auto_corregido = True
 
     # Base64 del recorte
     ret, buf = cv2.imencode('.jpg', crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -221,7 +234,9 @@ async def capture_frame():
 
     payload = {
         "track_id": int(time.time()),
-        "placa": placa,
+        "placa": placa_a_mostrar,
+        "placa_raw_ocr": placa_raw_ocr,
+        "auto_corregido": auto_corregido,
         "tipo": tipo,
         "municipio": mun,
         "confianza": det.get("confianza", 0.95),
@@ -232,7 +247,7 @@ async def capture_frame():
         "antecedentes": ant
     }
 
-    engine.tracker.confirmed_history[placa] = payload
+    engine.tracker.confirmed_history[placa_a_mostrar] = payload
     engine.tracker._guardar_historial_persistente()
     engine._notify_listeners({"event": "NEW_PLATE", "data": payload})
 

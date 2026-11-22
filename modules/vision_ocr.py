@@ -181,8 +181,71 @@ def mejorar_placa_lejana(crop_bgr: np.ndarray) -> np.ndarray:
     return mejorada
 
 
-DICT_A_LETRAS = {'0': 'O', '8': 'B', '5': 'S', '2': 'Z', '4': 'A', '6': 'G', '1': 'I'}
-DICT_A_DIGITOS = {'O': '0', 'I': '1', 'L': '1', 'B': '8', 'S': '5', 'Z': '2', 'A': '4', 'G': '6', 'D': '0', 'Q': '0'}
+def binarizar_placa_otsu(crop_bgr: np.ndarray) -> np.ndarray:
+    """
+    Binarización adaptativa Otsu para placas vehiculares:
+    Separa con máxima exactitud los caracteres negros troquelados del fondo reflectivo amarillo o blanco.
+    Inmune a reflejos lumínicos, sol directo o sombras asfálticas.
+    """
+    if crop_bgr is None or crop_bgr.size == 0:
+        return crop_bgr
+
+    gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY) if len(crop_bgr.shape) == 3 else crop_bgr
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    _, th = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # En la placa colombiana, los caracteres son oscuros y el fondo es claro (amarillo/blanco)
+    # Si la binarización invirtió la polaridad (fondo oscuro > 55%), invertimos
+    if np.mean(th == 255) < 0.45:
+        th = cv2.bitwise_not(th)
+
+    return cv2.cvtColor(th, cv2.COLOR_GRAY2BGR)
+
+
+def recortar_franja_caracteres(crop_bgr: np.ndarray) -> np.ndarray:
+    """
+    Recorte perimetral protector (Inner Strip ROI):
+    Elimina el marco exterior y la zona donde residen tornillos y remaches (superior 10% e inferior 14%),
+    aislando exclusivamente la franja horizontal donde se encuentran los caracteres alfanuméricos.
+    Previene que cabezas de tornillos sean leídas como 'I', '1', 'L', 'T' o '|'.
+    """
+    if crop_bgr is None or crop_bgr.size == 0:
+        return crop_bgr
+
+    h, w = crop_bgr.shape[:2]
+    if h < 20 or w < 40:
+        return crop_bgr
+
+    y1 = int(h * 0.10)
+    y2 = max(y1 + 15, int(h * 0.86))
+    x1 = int(w * 0.04)
+    x2 = max(x1 + 30, int(w * 0.96))
+
+    return crop_bgr[y1:y2, x1:x2]
+
+
+DICT_A_LETRAS = {
+    '0': 'O', '8': 'B', '5': 'S', '2': 'Z', '4': 'A', '6': 'G', '1': 'I',
+    '9': 'P', '7': 'T', '3': 'B'
+}
+DICT_A_DIGITOS = {
+    'O': '0', 'I': '1', 'L': '1', 'B': '8', 'S': '5', 'Z': '2', 'A': '4',
+    'G': '6', 'D': '0', 'Q': '0', 'T': '1', 'U': '0', 'J': '1'
+}
+
+# Mapeo de confusión visual típico en tipografía troquelada colombiana DIN 1451
+CONFUSION_LETRAS_DIN1451 = {
+    'I': 'J',
+    'Q': 'J',
+    'N': 'V',
+    'W': 'V',
+    'D': 'O'
+}
+
+CONFUSION_DIGITOS_DIN1451 = {
+    '4': '2',
+    '7': '1'
+}
 
 
 def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, float]:
@@ -191,8 +254,9 @@ def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, fl
     1. AUTOMÓVIL / CARRO: Exactamente 3 letras y 3 números (^[A-Z]{3}[0-9]{3}$). NUNCA 4 números.
     2. MOTOCICLETA: Exactamente 3 letras, 2 números y 1 letra (^[A-Z]{3}[0-9]{2}[A-Z]$).
     3. Si el OCR capturó 7 u 8 caracteres (ej: tornillo o borde leído como 1, 4 o I),
-       evalúa ventanas de 6 caracteres para extraer la placa real.
-    4. REGLA DURA: Si la cadena resultante NO cumple estrictamente con el formato de carro
+       evalúa ventanas de 6 caracteres y descarte de remaches en extremos para extraer la placa real.
+    4. Mapeo de confusión visual DIN 1451: Corrige ambigüedades comunes (J<->I/Q, V<->N/W, 2<->4).
+    5. REGLA DURA: Si la cadena resultante NO cumple estrictamente con el formato de carro
        ni de moto, es DESCARTADA (retorna None, None, 0.0). Jamás se emite una placa con 4 números.
     """
     if not texto_crudo:
@@ -276,23 +340,42 @@ def extraer_placa_estricta(texto_crudo: str) -> tuple[str | None, str | None, fl
 
         return None, None, 0.0
 
+    candidatos_evaluados = []
+
     # 1. Si mide exactamente 6 caracteres
     if len(alfa) == 6:
-        return evaluar_candidato_6(alfa)
+        codigo, tipo, conf = evaluar_candidato_6(alfa)
+        if codigo:
+            candidatos_evaluados.append((codigo, tipo, conf))
 
-    # 2. Si mide 7 u 8 caracteres (posible tornillo o artefacto en extremos)
-    mejores_ventanas = []
+    # 2. Descarte de remaches/tornillos aislados en bordes (longitud 7 u 8)
+    CARACTERES_REMACHE = set("1ILTJ4._")
+    if len(alfa) == 7:
+        if alfa[0] in CARACTERES_REMACHE:
+            c, t, conf = evaluar_candidato_6(alfa[1:])
+            if c:
+                candidatos_evaluados.append((c, t, conf * 0.98))
+        if alfa[-1] in CARACTERES_REMACHE:
+            c, t, conf = evaluar_candidato_6(alfa[:-1])
+            if c:
+                candidatos_evaluados.append((c, t, conf * 0.98))
+    elif len(alfa) == 8:
+        if alfa[0] in CARACTERES_REMACHE and alfa[-1] in CARACTERES_REMACHE:
+            c, t, conf = evaluar_candidato_6(alfa[1:-1])
+            if c:
+                candidatos_evaluados.append((c, t, conf * 0.96))
+
+    # 3. Ventanas deslizantes de 6 caracteres
     for start in range(len(alfa) - 5):
         ventana = alfa[start:start+6]
         codigo, tipo, conf = evaluar_candidato_6(ventana)
         if codigo:
-            # Ligera penalización por recorte de ventana
             conf_ajustada = conf * (0.95 if start == 0 or start == len(alfa)-6 else 0.90)
-            mejores_ventanas.append((codigo, tipo, conf_ajustada))
+            candidatos_evaluados.append((codigo, tipo, conf_ajustada))
 
-    if mejores_ventanas:
-        mejores_ventanas.sort(key=lambda x: x[2], reverse=True)
-        return mejores_ventanas[0]
+    if candidatos_evaluados:
+        candidatos_evaluados.sort(key=lambda x: x[2], reverse=True)
+        return candidatos_evaluados[0]
 
     return None, None, 0.0
 

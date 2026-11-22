@@ -23,12 +23,15 @@ if BASE_DIR not in sys.path:
 from modules.vision_ocr import (
     obtener_modelos,
     mejorar_placa_lejana,
+    binarizar_placa_otsu,
+    recortar_franja_caracteres,
     clasificar_texto_colombiano,
     extraer_placa_estricta,
     coincidir_municipio_colombiano,
     _agrupar_tokens_horizontales,
     verificar_densidad_caracteres
 )
+from modules.search_engine import consultar_placa
 from modules.tracker import RealtimePlateTracker, calcular_iou, son_la_misma_placa
 from modules.gemini_ocr import gemini_disponible, consultar_gemini_placa
 
@@ -100,7 +103,7 @@ def aplicar_nms_cajas(bboxes: list[tuple], iou_threshold: float = 0.20) -> list[
 
 
 class LiveCameraEngine:
-    def __init__(self, source=0, sampling_step=2, min_confidence=0.40):
+    def __init__(self, source=0, sampling_step=2, min_confidence=0.28):
         self.source = source
         self.sampling_step = sampling_step
         self.min_confidence = min_confidence
@@ -339,15 +342,31 @@ class LiveCameraEngine:
                 "recorte_img": crop_bgr
             }
 
+        # Multi-intento jerárquico inteligente con tolerancia extrema a ruido, sol y reflejos:
         # Intento 1: Con preprocesamiento de alta definición (LAB / CLAHE)
         preprocesada = mejorar_placa_lejana(crop_bgr)
         dict_det = procesar_tokens_ocr(ejecutar_easyocr(preprocesada))
 
-        # Intento 2 (Fallback): Con recorte crudo original (por si el realce cromático alteró contraste)
+        # Intento 2 (Otsu Adaptive Binarization): Separa caracteres de reflejos lumínicos / contraluz
+        if not dict_det:
+            otsu_img = binarizar_placa_otsu(crop_bgr)
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(otsu_img))
+
+        # Intento 3 (Franja interna recortada + Otsu): Elimina tornillos/remaches y marcos exteriores
+        if not dict_det:
+            franja_otsu = binarizar_placa_otsu(recortar_franja_caracteres(crop_bgr))
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(franja_otsu))
+
+        # Intento 4 (Franja interna cruda):
+        if not dict_det:
+            franja = recortar_franja_caracteres(crop_bgr)
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(franja))
+
+        # Intento 5 (Fallback): Con recorte crudo original (por si el realce cromático alteró contraste)
         if not dict_det:
             dict_det = procesar_tokens_ocr(ejecutar_easyocr(crop_bgr))
 
-        # Intento 3 (Fallback Carretera): Con Unsharp Mask para compensar desenfoque de movimiento
+        # Intento 6 (Fallback Carretera): Con Unsharp Mask para compensar desenfoque de movimiento
         if not dict_det:
             try:
                 gauss = cv2.GaussianBlur(crop_bgr, (0, 0), 2.0)
@@ -357,6 +376,24 @@ class LiveCameraEngine:
                 pass
 
         if dict_det:
+            # Auto-alineación asistida por base de datos (tolerancia a confusiones visuales 1-carácter)
+            placa_cand = dict_det["placa_raw"]
+            dict_det["placa_raw_ocr"] = placa_cand
+            dict_det["auto_corregido"] = False
+            try:
+                ant = consultar_placa(placa_cand)
+                if ant and ant.get("encontrado"):
+                    metodo = ant.get("metodo_usado")
+                    placa_db = ant.get("placa_encontrada")
+                    sim = ant.get("similitud", 0.0)
+                    if metodo == "SIMILITUD" and sim >= 82.0 and placa_db and len(placa_db) == 6:
+                        diffs = sum(1 for a, b in zip(placa_cand, placa_db) if a != b)
+                        if diffs == 1:
+                            dict_det["placa_raw"] = placa_db
+                            dict_det["auto_corregido"] = True
+                            dict_det["confianza"] = min(1.0, dict_det["confianza"] * 1.05)
+            except Exception:
+                pass
             return [dict_det]
         return []
 

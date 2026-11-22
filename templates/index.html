@@ -632,11 +632,16 @@
                     : "NO CENSADO EN BD LOCAL";
                 const propTxt = d.propietario || "NO REGISTRADO";
 
+                let metodoTxt = ant.metodo_usado || 'INDEXADA';
+                if (data.auto_corregido && data.placa_raw_ocr && data.placa_raw_ocr !== data.placa) {
+                    metodoTxt += ` <span style="color:#00E676; font-size:0.7rem;">(OCR: ${data.placa_raw_ocr} → ${data.placa})</span>`;
+                }
+
                 infoAntecedentesHtml = `
                     <div class="antecedentes-box">
                         <div class="antecedentes-row">
                             <span><strong>VEHICULO:</strong> ${vehiculoTxt}</span>
-                            <span>METODO: <strong>${ant.metodo_usado || 'INDEXADA'}</strong></span>
+                            <span>METODO: <strong>${metodoTxt}</strong></span>
                         </div>
                         <div class="antecedentes-row">
                             <span><strong>PROPIETARIO:</strong> ${propTxt}</span>

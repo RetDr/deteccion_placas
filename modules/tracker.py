@@ -152,6 +152,8 @@ class TrackedPlate:
     def update_ocr(self, new_det: dict):
         nueva_placa = new_det.get("placa_raw", "")
         nueva_conf = new_det.get("confianza", 0.0)
+        self.placa_raw_ocr = new_det.get("placa_raw_ocr", nueva_placa)
+        self.auto_corregido = new_det.get("auto_corregido", False)
 
         if nueva_placa and nueva_placa != "DESCONOCIDO" and len(nueva_placa) == 6:
             if nueva_placa != self.placa_raw:
@@ -173,10 +175,10 @@ class TrackedPlate:
 
     @property
     def is_confirmed(self):
-        # Confirmación inmediata al validar sintaxis estricta colombiana con confianza >= 0.35
+        # Confirmación inmediata al validar sintaxis estricta colombiana (6 caracteres) y confianza >= 0.28
         if not self.placa_raw or self.placa_raw == "DESCONOCIDO" or len(self.placa_raw) != 6:
             return False
-        return len(self.readings) >= 1 and self.confianza >= 0.35
+        return len(self.readings) >= 1 and self.confianza >= 0.28
 
     def to_dict(self):
         if self._cached_antecedentes is None and self.placa_raw != "DESCONOCIDO":
@@ -189,6 +191,8 @@ class TrackedPlate:
         return {
             "track_id": self.track_id,
             "placa": self.placa_raw,
+            "placa_raw_ocr": getattr(self, "placa_raw_ocr", self.placa_raw),
+            "auto_corregido": getattr(self, "auto_corregido", False),
             "tipo": self.tipo,
             "municipio": self.municipio,
             "confianza": round(self.confianza, 4),
