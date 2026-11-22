@@ -469,10 +469,9 @@
             <div class="viewport-toolbar">
                 <div class="viewport-controls">
                     <select class="btn" id="select-source" onchange="onSourceChange(this.value)" style="cursor: pointer; background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border-subtle);">
-                        <option value="0">FUENTE: CAMARA 0 (DEFAULT / LAPTOP)</option>
-                        <option value="1">FUENTE: CAMARA 1 (CELULAR USB / DROIDCAM / IRIUN)</option>
-                        <option value="2">FUENTE: CAMARA 2 (CELULAR USB)</option>
-                        <option value="3">FUENTE: CAMARA 3 (CELULAR USB)</option>
+                        <option value="1" selected>FUENTE: CAMARA 1 (CAMARA USB / CELULAR - PRINCIPAL)</option>
+                        <option value="0">FUENTE: CAMARA 0 (WEBCAM INTEGRADA LAPTOP)</option>
+                        <option value="2">FUENTE: CAMARA 2 (SECUNDARIA USB)</option>
                         <option value="file">FUENTE: VIDEO DE ARCHIVO</option>
                         <option value="custom">FUENTE: URL / IP STREAM</option>
                     </select>
@@ -704,16 +703,10 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    lblSource.innerText = "ACTIVO (" + data.source + ")";
-                    // Reconectar el flujo MJPEG en el navegador para evitar stream congelado
-                    const imgStream = document.getElementById("video-stream");
-                    imgStream.src = "";
-                    setTimeout(() => {
-                        imgStream.src = "/video_feed?t=" + Date.now();
-                    }, 250);
+                    lblSource.innerText = "ACTIVO (CAMARA " + data.source + ")";
                 } else {
                     lblSource.innerText = "FALLO (" + data.source + ")";
-                    alert("No se pudo iniciar la fuente: " + data.source + ". Verifique que el celular o dispositivo este conectado.");
+                    alert("No se pudo iniciar la fuente: " + data.source + ". Verifique que el dispositivo USB o celular este conectado.");
                 }
             } catch (e) {
                 lblSource.innerText = "ERROR DE CONEXION";

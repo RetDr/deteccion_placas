@@ -36,8 +36,8 @@ from modules.search_engine import consultar_placa
 from modules.gemini_ocr import gemini_disponible, guardar_gemini_key, obtener_gemini_key, consultar_gemini_placa
 
 # Inicializar motor de captura asíncrono
-# Por defecto inicia con la cámara web 0 (o video de prueba si no hay cámara)
-default_source = 0
+# Por defecto prioriza la cámara USB / Celular (1) sobre la webcam integrada (0)
+default_source = 1
 engine = LiveCameraEngine(source=default_source, sampling_step=4, min_confidence=0.28)
 
 # Administrador de conexiones WebSocket activas
@@ -77,11 +77,11 @@ async def lifespan(app: FastAPI):
     global server_loop
     server_loop = asyncio.get_running_loop()
 
-    # Iniciar motor de cámara: probar cámara 0, 1 (celular USB / DroidCam / Iriun) o 2
+    # Iniciar motor de cámara: priorizar cámara USB / Celular (1), luego integrada (0), luego 2
     started = False
-    for cam_idx in [0, 1, 2]:
+    for cam_idx in [1, 0, 2]:
         if engine.start(cam_idx):
-            print(f"[INFO] Camara iniciada con exito en indice: {cam_idx}")
+            print(f"[INFO] Camara principal iniciada con exito en indice: {cam_idx}")
             started = True
             break
 

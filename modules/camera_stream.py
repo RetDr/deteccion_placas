@@ -175,12 +175,12 @@ class LiveCameraEngine:
 
         src = int(self.source) if str(self.source).isdigit() else self.source
 
-        # En Windows, probar primero con DirectShow (DSHOW) para compatibilidad total con celulares USB (Android 14, DroidCam, Iriun)
+        # En Windows 10/11, MSMF (por defecto) es el backend moderno y nativo para camaras USB y celulares
         if isinstance(src, int) or str(src).isdigit():
             idx = int(src)
-            self.cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-            if not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(idx)
+            self.cap = cv2.VideoCapture(idx)
+            if not self.cap or not self.cap.isOpened():
+                self.cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
         else:
             self.cap = cv2.VideoCapture(src)
 
@@ -190,9 +190,9 @@ class LiveCameraEngine:
 
         if str(self.source).isdigit():
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            # Solicitar máxima resolución compatible sin forzar códecs incompatibles con celulares
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            # Solicitar resolución de alta fidelidad para detección en tiempo real
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
 
         self.is_running = True
@@ -233,25 +233,83 @@ class LiveCameraEngine:
             self.cap = None
 
     def change_source(self, new_source):
-        return self.start(new_source)
+        """
+        Cambio dinámico en caliente sin reiniciar hilos de fondo ni romper la conexión MJPEG.
+        Garantiza que la imagen nunca se congele o se dañe en el navegador.
+        """
+        src = int(new_source) if str(new_source).isdigit() else new_source
+
+        with self.lock:
+            old_cap = self.cap
+            self.cap = None
+
+        if old_cap:
+            try:
+                old_cap.release()
+            except Exception:
+                pass
+        time.sleep(0.3)
+
+        new_cap = None
+        if isinstance(src, int) or str(src).isdigit():
+            idx = int(src)
+            new_cap = cv2.VideoCapture(idx)
+            if not new_cap or not new_cap.isOpened():
+                new_cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        else:
+            new_cap = cv2.VideoCapture(src)
+
+        if new_cap and new_cap.isOpened():
+            if str(src).isdigit():
+                new_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                new_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                new_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                new_cap.set(cv2.CAP_PROP_FPS, 30)
+
+            with self.lock:
+                self.cap = new_cap
+                self.source = new_source
+                self.latest_frame = None
+                self.tracker.active_tracks.clear()
+                self.pending_ocr_tracks.clear()
+            print(f"[CAMARA] Cambio exitoso a fuente: {new_source}")
+            return True
+        else:
+            print(f"[ERROR] No se pudo abrir la fuente: {new_source}")
+            return False
 
     def _capture_loop(self):
         last_time = time.time()
         fps_counter = 0
 
-        while self.is_running and self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
+        while self.is_running:
+            with self.lock:
+                cap = self.cap
+            if cap is None or not cap.isOpened():
+                time.sleep(0.04)
+                continue
+
+            ret, frame = cap.read()
             if not ret:
-                if not str(self.source).isdigit():
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                if not str(self.source).isdigit() and cap:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     continue
                 else:
-                    time.sleep(0.01)
+                    time.sleep(0.015)
                     continue
 
             with self.lock:
                 self.latest_frame = frame
                 self.total_frames_read += 1
+
+            fps_counter += 1
+            now = time.time()
+            if now - last_time >= 1.0:
+                self.camera_fps = round(fps_counter / (now - last_time), 1)
+                fps_counter = 0
+                last_time = now
+
+            time.sleep(0.003)
 
             fps_counter += 1
             now = time.time()
@@ -467,8 +525,8 @@ class LiveCameraEngine:
             h_frame, w_frame = frame_to_process.shape[:2]
             detected_bboxes = []
 
-            # 1. Detección YOLO en resolución completa a conf=0.15 (idéntico al modo foto que acierta 4/5)
-            res_plates = plate_detector(frame_to_process, verbose=False, conf=0.15)
+            # 1. Detección YOLO especializada en placas vehiculares (conf=0.12 de alta sensibilidad)
+            res_plates = plate_detector(frame_to_process, verbose=False, conf=0.12)
             for r in res_plates:
                 for box in r.boxes:
                     bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
@@ -492,15 +550,6 @@ class LiveCameraEngine:
                 color_boxes = detectar_placas_por_color(frame_to_process)
                 if color_boxes:
                     detected_bboxes.extend(color_boxes)
-
-            # 3. Fallback de encuadre óptico y encuadre central constante (idéntico al modo captura que acierta 4/5)
-            if not detected_bboxes:
-                rx1, ry1 = int(w_frame * 0.15), int(h_frame * 0.20)
-                rx2, ry2 = int(w_frame * 0.85), int(h_frame * 0.80)
-                crop_center = frame_to_process[ry1:ry2, rx1:rx2]
-                tiene_txt, _ = verificar_densidad_caracteres(crop_center)
-                if tiene_txt or not self.tracker.active_tracks:
-                    detected_bboxes.append((rx1, ry1, rx2, ry2))
 
             # Aplicar Supresión de No Máximos (NMS) para fusionar cajas solapadas de una misma placa
             detected_bboxes = aplicar_nms_cajas(detected_bboxes, iou_threshold=0.20)
@@ -560,7 +609,11 @@ class LiveCameraEngine:
     def get_annotated_frame(self):
         with self.lock:
             if self.latest_frame is None:
-                return None
+                # Standby visual para que la transmisión MJPEG nunca se corte o congele en el navegador
+                blank = np.zeros((480, 640, 3), dtype=np.uint8)
+                msg = f"CONECTANDO FUENTE: {self.source}..."
+                cv2.putText(blank, msg, (100, 240), cv2.FONT_HERSHEY_DUPLEX, 0.65, (0, 230, 118), 1, cv2.LINE_AA)
+                return blank
             frame = self.latest_frame.copy()
             detections = list(self.latest_detections)
 
