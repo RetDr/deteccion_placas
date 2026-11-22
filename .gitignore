@@ -1,0 +1,29 @@
+# Python bytecode y compilados
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Entornos virtuales
+.venv/
+venv/
+ENV/
+env/
+
+# Credenciales y claves privadas
+.gemini_key
+.env
+*.key
+*.pem
+
+# Cache y archivos de configuración en tiempo de ejecución
+models/ultralytics/
+models/easyocr/*.pth
+.pytest_cache/
+
+# Archivos del sistema operativo
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

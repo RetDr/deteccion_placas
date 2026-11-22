@@ -1,0 +1,17 @@
+# Dependencias para Sistema de Reconocimiento de Placas (ANPR Colombia)
+opencv-python>=4.8.0
+ultralytics>=8.0.0
+easyocr>=1.7.0
+numpy>=1.23.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Servidor Web en Tiempo Real y API
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+pydantic>=2.0.0
+
+# Búsqueda y Comparación Difusa
+rapidfuzz>=3.0.0
+pandas>=2.0.0
+streamlit>=1.30.0
