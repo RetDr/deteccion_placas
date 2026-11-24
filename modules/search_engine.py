@@ -14,12 +14,22 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from rapidfuzz import fuzz
+try:
+    from rapidfuzz import fuzz
+except ImportError:
+    import difflib
+    class FuzzFallback:
+        @staticmethod
+        def ratio(s1, s2):
+            return difflib.SequenceMatcher(None, s1, s2).ratio() * 100.0
+    fuzz = FuzzFallback()
 from modules.database import (
     buscar_por_placa_indexada,
     obtener_todas_las_placas,
     poblar_datos_prueba
 )
+from modules.fuzzy_inference import sistema_difuso
+from modules.ml_classifier import clasificador_riesgo
 
 # Expresiones regulares oficiales de Colombia
 PATRON_CARRO = re.compile(r'^[A-Z]{3}[0-9]{3}$')
@@ -103,13 +113,14 @@ def buscar_por_similitud(placa_busqueda: str, umbral: float = 82.0) -> tuple[dic
     return None, 0.0
 
 
-def consultar_placa(placa_raw: str) -> dict:
+def consultar_placa(placa_raw: str, ocr_confidence: float = 0.90) -> dict:
     """
-    CONTRATO DE INTEGRACIÓN MVP (Persona B):
-    Ejecuta la consulta en cascada a través de las 3 capas:
+    CONTRATO DE INTEGRACIÓN MVP AMPLIA CON INTELIGENCIA COMPUTACIONAL:
     1. Filtrado sintáctico por reglas colombianas.
     2. Búsqueda indexada exacta por SQLite (< 0.2 ms).
     3. Búsqueda por similitud (tolerancia a fallos de OCR) con RapidFuzz.
+    4. Evaluación Difusa Mamdani del Riesgo Operativo (Fuzzy Inference System).
+    5. Inferencia Neuronal (MLP) sobre probabilidad de reincidencia.
     """
     placa_limpia = normalizar_placa(placa_raw)
 
@@ -123,40 +134,75 @@ def consultar_placa(placa_raw: str) -> dict:
             "nivel_alerta": "VERDE",
             "similitud": 0.0,
             "datos": None,
+            "evaluacion_difusa": None,
+            "prediccion_ml": None,
             "mensaje": f"La placa '{placa_limpia}' no cumple la norma sintáctica colombiana."
         }
 
     # 2. Capa 2: Búsqueda Indexada (Exacta)
-    datos_exactos = buscar_por_placa_indexada(placa_limpia)
-    if datos_exactos:
-        alerta = calcular_nivel_alerta(datos_exactos)
-        return {
-            "placa_consultada": placa_limpia,
-            "placa_encontrada": datos_exactos["placa"],
-            "metodo_usado": "INDEXADA",
-            "encontrado": True,
-            "nivel_alerta": alerta,
-            "similitud": 100.0,
-            "datos": datos_exactos,
-            "mensaje": "Vehículo localizado por Búsqueda Indexada en SQLite."
-        }
+    datos_vehiculo = buscar_por_placa_indexada(placa_limpia)
+    metodo_usado = "INDEXADA"
+    score_similitud = 100.0
+    placa_encontrada = placa_limpia if datos_vehiculo else None
 
-    # 3. Capa 3: Búsqueda por Similitud (Fuzzy Matching ante errores de lectura OCR)
-    datos_similares, score_similitud = buscar_por_similitud(placa_limpia, umbral=80.0)
-    if datos_similares:
-        alerta = calcular_nivel_alerta(datos_similares)
+    # 3. Capa 3: Búsqueda por Similitud si no se halló exacta
+    if not datos_vehiculo:
+        datos_vehiculo, score_similitud = buscar_por_similitud(placa_limpia, umbral=80.0)
+        if datos_vehiculo:
+            metodo_usado = "SIMILITUD"
+            placa_encontrada = datos_vehiculo["placa"]
+
+    if datos_vehiculo:
+        alerta = calcular_nivel_alerta(datos_vehiculo)
+        eval_difusa = sistema_difuso.inferir_riesgo(
+            ocr_conf=ocr_confidence,
+            multas_count=datos_vehiculo.get("multas_simit", 0),
+            valor_multas=datos_vehiculo.get("valor_multas", 0),
+            soat_vigente=datos_vehiculo.get("soat_vigente", 1),
+            tecno_vigente=datos_vehiculo.get("tecnomecanica_vigente", 1),
+            reporte_hurto=datos_vehiculo.get("reporte_hurto", 0),
+            orden_inmovilizacion=datos_vehiculo.get("orden_inmovilizacion", 0)
+        )
+        prediccion_ml = clasificador_riesgo.predict_reincidencia(datos_vehiculo)
+
         return {
             "placa_consultada": placa_limpia,
-            "placa_encontrada": datos_similares["placa"],
-            "metodo_usado": "SIMILITUD",
+            "placa_encontrada": placa_encontrada,
+            "metodo_usado": metodo_usado,
             "encontrado": True,
             "nivel_alerta": alerta,
             "similitud": round(score_similitud, 1),
-            "datos": datos_similares,
-            "mensaje": f"Coincidencia difusa ({score_similitud:.0f}% similitud con {datos_similares['placa']})."
+            "datos": datos_vehiculo,
+            "evaluacion_difusa": eval_difusa,
+            "prediccion_ml": prediccion_ml,
+            "mensaje": f"Vehículo localizado por {metodo_usado} (Riesgo Difuso: {eval_difusa['score']}/100 - {eval_difusa['decision']})."
         }
 
     # No registrado en base de datos de antecedentes
+    datos_default = {
+        "placa": placa_limpia,
+        "tipo": tipo_veh,
+        "marca": "NO REGISTRADO EN ANTECEDENTES",
+        "linea": "Vehículo no censado en base local",
+        "modelo": 0,
+        "color": "DESCONOCIDO",
+        "propietario": "SIN REGISTRO POLICIAL",
+        "cedula_propietario": "N/A",
+        "municipio_registro": "COLOMBIA",
+        "multas_simit": 0,
+        "valor_multas": 0,
+        "detalle_multas": "Sin registros en base de datos",
+        "soat_vigente": 1,
+        "soat_vencimiento": "N/A",
+        "tecnomecanica_vigente": 1,
+        "tecnomecanica_vencimiento": "N/A",
+        "reporte_hurto": 0,
+        "orden_inmovilizacion": 0,
+        "observaciones": "Placa detectada pero no figura en base de datos local."
+    }
+    eval_difusa = sistema_difuso.inferir_riesgo(ocr_confidence, 0, 0, 1, 1, 0, 0)
+    pred_ml = clasificador_riesgo.predict_reincidencia(datos_default)
+
     return {
         "placa_consultada": placa_limpia,
         "placa_encontrada": None,
@@ -164,27 +210,9 @@ def consultar_placa(placa_raw: str) -> dict:
         "encontrado": False,
         "nivel_alerta": "VERDE",
         "similitud": 0.0,
-        "datos": {
-            "placa": placa_limpia,
-            "tipo": tipo_veh,
-            "marca": "NO REGISTRADO EN ANTECEDENTES",
-            "linea": "Vehículo no censado en base local",
-            "modelo": 0,
-            "color": "DESCONOCIDO",
-            "propietario": "SIN REGISTRO POLICIAL",
-            "cedula_propietario": "N/A",
-            "municipio_registro": "COLOMBIA",
-            "multas_simit": 0,
-            "valor_multas": 0,
-            "detalle_multas": "Sin registros en base de datos",
-            "soat_vigente": 1,
-            "soat_vencimiento": "N/A",
-            "tecnomecanica_vigente": 1,
-            "tecnomecanica_vencimiento": "N/A",
-            "reporte_hurto": 0,
-            "orden_inmovilizacion": 0,
-            "observaciones": "Placa detectada pero no figura en base de datos local."
-        },
+        "datos": datos_default,
+        "evaluacion_difusa": eval_difusa,
+        "prediccion_ml": pred_ml,
         "mensaje": "Placa no encontrada en la base de datos de antecedentes."
     }
 

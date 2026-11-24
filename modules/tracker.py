@@ -182,7 +182,7 @@ class TrackedPlate:
         if self._cached_antecedentes is None and self.placa_raw != "DESCONOCIDO":
             try:
                 from modules.search_engine import consultar_placa
-                self._cached_antecedentes = consultar_placa(self.placa_raw)
+                self._cached_antecedentes = consultar_placa(self.placa_raw, ocr_confidence=self.confianza)
             except Exception:
                 self._cached_antecedentes = None
 

@@ -22,6 +22,9 @@ from modules.camera_stream import LiveCameraEngine, detectar_placas_por_color, a
 from modules.vision_ocr import obtener_modelos
 from modules.search_engine import consultar_placa
 from modules.gemini_ocr import gemini_disponible, guardar_gemini_key, obtener_gemini_key, consultar_gemini_placa
+from modules.fuzzy_inference import sistema_difuso
+from modules.ml_classifier import clasificador_riesgo
+from modules.heuristic_optimizer import GeneticImageOptimizer, ParticleSwarmOptimizer
 
 # Inicializar motor de captura asíncrono
 # Por defecto inicia con la cámara web 0 (o video de prueba si no hay cámara)
@@ -247,6 +250,44 @@ async def get_antecedentes(placa: str):
     from modules.search_engine import consultar_placa
     res = consultar_placa(placa)
     return JSONResponse(res)
+
+
+@app.get("/api/ic/metrics")
+async def get_ic_metrics():
+    """
+    Retorna las métricas académicas de Inteligencia Computacional:
+    - Evaluación de la Red Neuronal (Matriz de confusión, F1-Score, BCE Loss).
+    - Estado del Sistema de Inferencia Difuso Mamdani.
+    - Sintonización Heurística Bio-inspirada (PSO y Algoritmos Genéticos).
+    """
+    if not clasificador_riesgo.is_trained:
+        clasificador_riesgo.train_and_evaluate()
+
+    return JSONResponse({
+        "status": "success",
+        "red_neuronal_mlp": clasificador_riesgo.evaluation_metrics,
+        "sistema_difuso": {
+            "tipo_inferencia": "Mamdani",
+            "defusificacion": "Centro de Gravedad (Centroid / COG)",
+            "variables_linguisticas_entrada": ["confianza_ocr", "severidad_transito", "severidad_judicial"],
+            "variable_salida": "riesgo_operativo_inmovilizacion",
+            "reglas_activas": 7
+        },
+        "optimizacion_bioinspirada": {
+            "algoritmo_genetico": "Sintonización estocástica de filtros de realce y CLAHE",
+            "enjambre_particulas_pso": "Optimización de convergencia espacio-temporal IoU/EMA"
+        }
+    })
+
+
+@app.post("/api/ic/run_genetic_optimization")
+async def run_genetic_optimization():
+    """Ejecuta una ronda de evolución genética sobre una muestra sintética o fotograma actual."""
+    import numpy as np
+    dummy_roi = np.random.randint(40, 220, (64, 180, 3), dtype=np.uint8)
+    ga = GeneticImageOptimizer(population_size=12, generations=6)
+    params, history = ga.optimize(dummy_roi)
+    return JSONResponse({"status": "success", "parametros_optimos": params, "historial_fitness": history})
 
 
 class VehicleRecord(BaseModel):

@@ -646,6 +646,20 @@
                             <span>MULTAS SIMIT: <strong style="color: ${(d.multas_simit && d.multas_simit > 0) ? '#FFB300' : 'inherit'}">${multasTxt}</strong></span>
                             <a href="https://www.fcm.org.co/simit/#/home-public" target="_blank" class="btn-simit">PORTAL SIMIT</a>
                         </div>
+                        ${ant.evaluacion_difusa ? `
+                        <div style="background: rgba(0,0,0,0.25); border-left: 3px solid ${ant.evaluacion_difusa.color_ui}; padding: 4px 6px; margin-top: 4px; border-radius: 2px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.68rem;">
+                                <span>🧠 <strong>Inferencia Difusa Mamdani:</strong></span>
+                                <span style="font-weight: bold; color: ${ant.evaluacion_difusa.color_ui}">Riesgo: ${ant.evaluacion_difusa.score}/100</span>
+                            </div>
+                            <div style="font-size: 0.65rem; color: #EDF2F7; margin-top: 2px;">
+                                🎯 Decisión: <strong>${ant.evaluacion_difusa.decision}</strong>
+                            </div>
+                            ${ant.prediccion_ml ? `
+                            <div style="font-size: 0.63rem; color: #8C9BAB; margin-top: 2px;">
+                                📊 Red Neuronal MLP: Reincidencia <strong>${(ant.prediccion_ml.probabilidad_reincidencia * 100).toFixed(1)}%</strong> (${ant.prediccion_ml.perfil_riesgo})
+                            </div>` : ''}
+                        </div>` : ''}
                         ${d.observaciones ? `<div style="font-size: 0.65rem; color: #8C9BAB; margin-top: 2px;">${d.observaciones}</div>` : ''}
                     </div>
                 `;
