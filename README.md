@@ -1,305 +1,124 @@
-# Sistema de Reconocimiento Automático de Placas Vehiculares de Colombia (ANPR / ALPR)
+# Sistema de Reconocimiento Automático de Placas (ANPR) y Evaluación de Riesgo Vial con Inteligencia Computacional
 
-Sistema integral de visión artificial e inteligencia computacional para el reconocimiento automático de placas vehiculares de Colombia en tiempo real (30 FPS), con rastreo geométrico de objetos (Object Tracking), supresión de duplicados, corrección sintáctica reglamentaria y consulta automatizada de antecedentes de tránsito (SIMIT, RUNT) y judiciales en base de datos local SQLite y nube.
+Sistema integral para el reconocimiento automático de placas vehiculares en Colombia en tiempo real (30 FPS) y toma de decisiones viales mediante **Inteligencia Computacional (Soft Computing)**. 
 
----
-
-## Tabla de Contenidos
-
-- [Descripcion General](#descripcion-general)
-- [Arquitectura del Sistema](#arquitectura-del-sistema)
-- [Caracteristicas Principales](#caracteristicas-principales)
-- [Estructura del Repositorio](#estructura-del-repositorio)
-- [Requisitos del Sistema](#requisitos-del-sistema)
-- [Instalacion y Configuracion](#instalacion-y-configuracion)
-- [Guia de Uso y Ejecucion](#guia-de-uso-y-ejecucion)
-- [Conexion de Camaras](#conexion-de-camaras)
-- [Base de Datos y Antecedentes](#base-de-datos-y-antecedentes)
-- [Documentacion de API y WebSockets](#documentacion-de-api-y-websockets)
-- [Benchmark y Rendimiento](#benchmark-y-rendimiento)
-- [Licencia](#licencia)
+A diferencia de los sistemas tradicionales que solo hacen consultas determinísticas a bases de datos, este proyecto modela la incertidumbre sensorial, optimiza de forma bio-inspirada los parámetros de visión y clasifica conductores reincidentes mediante aprendizaje supervisado.
 
 ---
 
-## Descripcion General
+## 🧠 Núcleo de Inteligencia Computacional
 
-Este proyecto implementa una solucion de grado vial y carretera para la deteccion e identificacion instantanea de matriculas automotrices y de motocicletas bajo la normativa colombiana de transporte.
+1. **Lógica Difusa (Fuzzy Inference System - Mamdani):**
+   - **Entradas:** Confianza visual del OCR $[0, 1]$, Severidad de Tránsito (multas SIMIT + SOAT/Tecno vencidos) $[0, 100]$ y Severidad Judicial (hurto/inmovilización) $[0, 100]$.
+   - **Inferencia:** Base de reglas lingüísticas IF-THEN con T-norma de Gödel (Mínimo) y S-norma (Máximo).
+   - **Salida:** Nivel de Riesgo Operativo $[0, 100]$ obtenido mediante **Defusificación por Centro de Gravedad (Centroid / COG)**:
+     - `0 - 24`: Paso Permitido (Vehículo al día).
+     - `25 - 49`: Alerta Preventiva (Multas pendientes leves).
+     - `50 - 74`: Inspección Requerida (Documentación vencida).
+     - `75 - 100`: Inmovilización Inmediata (Orden de captura o hurto).
 
-El sistema esta disenado para operar de forma continua bajo condiciones opticas desafiantes (movimiento a alta velocidad, iluminacion solar directa, sombras intensas, reflejos sobre superficies metalicas y ruido de sensor), proporcionando visualizacion continua mediante streaming MJPEG, notificaciones reactivas via WebSocket y un panel de control web responsivo de alta telemetria.
+2. **Optimización Bio-inspirada (Algoritmos Genéticos y PSO):**
+   - **Algoritmo Genético (GA):** Calibra los hiperparámetros de preprocesamiento de imagen (`clip_limit`, `tile_grid_size`, máscara de enfoque y kernel de suavizado) maximizando una función de aptitud (*Fitness*) multiobjetivo basada en nitidez Laplaciana y Entropía de Shannon.
+   - **Enjambre de Partículas (PSO):** Optimiza los coeficientes de asociación espacio-temporal (IoU, distancias euclidianas de centroide y suavizado EMA) del rastreador vehicular.
 
----
-
-## Arquitectura del Sistema
-
-El pipeline procesa cada cuadro mediante una arquitectura desacoplada Productor-Consumidor multihilo para garantizar 30 FPS constantes sin congelamientos:
-
-```
-[ Camara USB / Celular / RTSP / Video ]
-                  │
-                  ▼
-         [ Hilo de Captura ] ──▶ Buffer DirectShow (YUY2/NV12/MJPG a 30 FPS)
-                  │
-                  ▼
-         [ Hilo de Tracking ]
-                  │
-                  ├── 1. Deteccion Primaria: YOLOv8 especializado en placas (conf >= 0.15)
-                  ├── 2. Red de Seguridad: Descomposicion cromatica HSV (Amarillo/Blanco)
-                  ├── 3. Enfoque Dinamico: Encuadre Optico ROI adaptativo
-                  ├── 4. Fusion Espacial: Supresion de No Maximos (NMS multi-criterio)
-                  └── 5. Rastreador IoU: Filtro de zona muerta y suavizado EMA
-                  │
-                  ▼
-       [ Cola Asincrona de OCR ]
-                  │
-                  ├── Evaluacion Laplaciana de Nitidez (Best-Shot Buffer)
-                  ├── Superresolucion LAB + Realce de Contraste CLAHE
-                  ├── Compensacion de desenfoque vial (Filtro Unsharp Mask)
-                  ├── Motor OCR Local: EasyOCR optimizado para CPU/GPU
-                  └── Modo Hibrido Nube: Google Gemini 1.5 Flash Vision (Opcional)
-                  │
-                  ▼
-    [ Motor de Sintaxis Colombiana ]
-                  │
-                  ├── Validacion Estricta: Carro (ABC123) / Moto (ABC12D)
-                  ├── Correccion Posicional (Letras en pos 0-2, Digitos en pos 3-5)
-                  └── Cruce Fonetico de Municipios (Base oficial de 54 secretarias)
-                  │
-                  ▼
-    [ Motor de Busqueda de Antecedentes ]
-                  │
-                  ├── Capa 1: Coincidencia Exacta Indexada SQLite (0.5 ms)
-                  ├── Capa 2: Similitud Difusa Levenshtein (Tolerancia OCR)
-                  └── Capa 3: Normalizacion Fonetica Soundex
-                  │
-                  ▼
-[ Panel Web en Tiempo Real: FastAPI + WebSocket + Telemetria HUD ]
-```
+3. **Aprendizaje Supervisado (Red Neuronal MLP):**
+   - Perceptrón Multicapa ($6 \to 16 \to 8 \to 1$) entrenado desde primeros principios con **Backpropagation** y optimización SGD Mini-Batch con regularización $L_2$.
+   - Predice la probabilidad de reincidencia o fuga de conductores según perfil histórico.
+   - Valida formalmente con **Matriz de Confusión ($TP, TN, FP, FN$)**, **Precision**, **Recall** y **F1-Score**.
 
 ---
 
-## Caracteristicas Principales
+## 📋 Requisitos del Sistema
 
-- **Deteccion Hibrida Multi-Escala:** Modelo YOLOv8 ultraligero complementado con segmentacion cromatica en espacio HSV para placas colombianas amarillas (servicio particular/publico) y blancas (servicio publico/oficial).
-- **Rastreo con Eliminacion de Duplicados:** Un solo vehiculo en transito genera un unico registro consolidado en el historial, eliminando alertas redundantes o falsos positivos recurrentes.
-- **Compensacion de Movimiento Vial:** Buffer Best-Shot que evalua la varianza del Laplaciano en tiempo real para seleccionar y enviar al OCR el fotograma de mayor nitidez.
-- **Optimizacion para Camaras de Celular:** Compatibilidad nativa con Android 14 Webcam, DroidCam, Iriun e IP Webcam mediante backend DirectShow (`cv2.CAP_DSHOW`) sin bloqueos de negociacion de formato de color.
-- **Sintaxis y Normalizacion de Colombia:** Correccion automatica de confusiones habituales de OCR (ej. O/0, I/1, B/8, Z/2) segun la posicion obligatoria del caracter. Deteccion de municipios oficiales de transito (Bogota D.C., Medellin, Cali, Barranquilla, Envigado, etc.).
-- **Auditoria de Transito y Seguridad:** Cruce inmediato contra la base de datos de antecedentes locales con estados de multas SIMIT, vigencia de SOAT, revision tecnomecanica y reportes judiciales de hurto o inmovilizacion.
-- **Modo Dual Local / Gemini:** Funcionamiento 100% offline con EasyOCR local y opcion de conmutacion dinamica a Google Gemini 1.5 Flash Vision mediante clave de API.
+- **Sistema Operativo:** Windows 10/11, Linux o macOS.
+- **Python:** Versión 3.10 o superior (recomendado 3.11 a 3.14).
+- **Cámara:** Cámara web USB, cámara integrada de laptop o cámara de celular (vía DroidCam, Iriun Webcam o IP Webcam). Si no hay cámara conectada, el sistema incluye un video de prueba de respaldo automático.
 
----
+### Dependencias de Python
 
-## Estructura del Repositorio
-
-```
-deteccion_placas/
-│
-├── data/
-│   ├── antecedentes.db          # Base de datos SQLite con historial vehicular y antecedentes
-│   ├── historial_capturas.json  # Registro persistente de capturas realizadas
-│   └── video_prueba.mp4         # Secuencia de video para validacion sin camara fisica
-│
-├── models/
-│   ├── plate_detector/
-│   │   └── best.pt              # Pesos entrenados del detector YOLOv8 para placas
-│   └── easyocr/                 # Pesos preentrenados del motor OCR local
-│
-├── modules/
-│   ├── __init__.py
-│   ├── camera_stream.py         # Motor de captura, hilos de tracking y streaming MJPEG
-│   ├── database.py              # Administracion de base de datos SQLite y consultas
-│   ├── gemini_ocr.py            # Integracion cliente HTTP para API Google Gemini Flash
-│   ├── search_engine.py         # Motor de busqueda de 3 capas (Exacta, Difusa, Soundex)
-│   ├── tracker.py               # Rastreador IoU, filtro de temblor y gestion de pistas
-│   └── vision_ocr.py            # Segmentacion, preprocesamiento LAB/CLAHE y sintaxis
-│
-├── templates/
-│   └── index.html               # Panel web de control, visualizacion y telemetria
-│
-├── app.py                       # Interfaz alternativa para pruebas en Streamlit
-├── iniciar.bat                  # Lanzador rapido para Windows (CMD)
-├── iniciar.ps1                  # Lanzador interactivo para Windows PowerShell
-├── registrar_placa.py           # Herramienta CLI para registrar vehiculos en la base de datos
-├── requirements.txt             # Dependencias del proyecto
-├── server.py                    # Servidor web principal FastAPI con WebSockets
-├── test_vision.py               # Suite de pruebas unitarias del pipeline de vision
-└── yolov8n.pt                   # Pesos base de deteccion YOLOv8
-```
-
----
-
-## Requisitos del Sistema
-
-- **Sistema Operativo:** Windows 10/11, Linux (Ubuntu 20.04+) o macOS.
-- **Python:** Version 3.10, 3.11 o 3.12 (64-bit).
-- **Hardware Recomendado:**
-  - Procesador Intel Core i5 / AMD Ryzen 5 o superior.
-  - 8 GB de memoria RAM minima (16 GB recomendado).
-  - GPU NVIDIA con soporte CUDA (opcional, acelera inferencia pero no es mandatorio).
-- **Camara:** Camara web USB integrada, camara externa o celular conectado mediante cable USB / Wi-Fi.
-
----
-
-## Instalacion y Configuracion
-
-### 1. Clonar el Repositorio
-
+Instálalas con:
 ```bash
-git clone https://github.com/RetDr/deteccion_placas.git
-cd deteccion_placas
-```
-
-### 2. Crear y Activar un Entorno Virtual (Recomendado)
-
-En Windows (PowerShell):
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-```
-
-En Linux / macOS:
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Instalar Dependencias
-
-```bash
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-*Nota para aceleracion por GPU (NVIDIA CUDA):* Si dispones de tarjeta grafica NVIDIA, instala la version de PyTorch con soporte CUDA correspondiente desde [pytorch.org](https://pytorch.org).
-
----
-
-## Guia de Uso y Ejecucion
-
-### Inicio Rapido del Servidor
-
-Puedes iniciar la aplicacion de tres formas:
-
-**Opcion A - Usando PowerShell:**
-```powershell
-.\iniciar.ps1
-```
-
-**Opcion B - Usando archivo Batch:**
-Doble clic sobre `iniciar.bat` o desde CMD:
-```cmd
-iniciar.bat
-```
-
-**Opcion C - Comando Python directo:**
+O directamente:
 ```bash
-python server.py
-```
-
-Una vez iniciado, abre tu navegador web en:
-```
-http://localhost:8000
+pip install opencv-python ultralytics easyocr fastapi uvicorn pydantic rapidfuzz torch torchvision
 ```
 
 ---
 
-## Conexion de Camaras
+## 🚀 Cómo Ejecutar el Proyecto
 
-El sistema permite seleccionar la fuente de video directamente desde la interfaz web:
+Tienes dos modos de ejecución según lo que desees probar o sustentar:
 
-1. **Camara 0:** Camara web integrada de la laptop o primera camara USB detectada.
-2. **Camara 1 / Camara 2:** Camara de telefono inteligente conectada via USB.
-   - *Android 14:* Conecta el celular por cable USB, selecciona en la notificacion del telefono "Usar USB para: Camara web".
-   - *DroidCam / Iriun:* Inicia la aplicacion en el celular y la aplicacion cliente en la PC; el sistema la reconocera como indice 1 o 2.
-3. **Camara IP / Stream Personalizado:** Selecciona "TRANSMISION PERSONALIZADA (URL)" e introduce la direccion RTSP o HTTP (ej. `http://192.168.1.15:8080/video` con IP Webcam).
-4. **Archivo de Video:** Selecciona "VIDEO DE PRUEBA LOCAL" para verificar el funcionamiento con el video incluido en `data/video_prueba.mp4`.
+### Modo 1: Pruebas de Inteligencia Computacional (Consola)
+Ejecuta la validación de Lógica Difusa Mamdani, Algoritmos Genéticos, PSO y el entrenamiento de la Red Neuronal con sus matrices de confusión:
 
----
+- **Con doble clic en Windows:**  
+  Abre el archivo `probar_ic.bat`.
 
-## Controles de la Interfaz Web
-
-- **Captura Manual Instantanea:** Presiona el boton "TOMAR FOTO Y RECONOCER" o la **Barra Espaciadora** del teclado para procesar inmediatamente el cuadro actual y consultar antecedentes.
-- **Encuadre Optico (ROI):** Activa o desactiva la zona de interes en pantalla para enfocar la atencion del algoritmo en el area de transito vehicular.
-- **Motor Gemini Flash:** Permite ingresar tu API Key de Google Gemini para habilitar el reconocimiento hibrido en la nube, con conmutacion automatica a EasyOCR local en caso de caida o restriccion.
-- **Limpiar Registros:** Reinicia el panel visual de detecciones activas.
+- **Desde la terminal:**  
+  ```bash
+  python test_computational_intelligence.py
+  ```
+  *(O ejecuta `python demo_ic.py` para una demostración guiada paso a paso ante el jurado).*
 
 ---
 
-## Base de Datos y Antecedentes
+### Modo 2: Servidor Web y Detección en Tiempo Real
 
-El archivo `data/antecedentes.db` contiene la estructura SQLite para la gestion vehicular:
+Inicia el motor de captura de video a 30 FPS, el detector YOLOv8, el lector OCR y el panel web reactivo:
 
-### Esquema de la Tabla `vehiculos`
+- **Con doble clic en Windows:**  
+  Abre el archivo `iniciar.bat`.
 
-| Campo | Tipo | Descripcion |
-|---|---|---|
-| `placa` | TEXT (PK) | Codigo de placa normalizado (6 caracteres) |
-| `tipo` | TEXT | CARRO o MOTO |
-| `marca` | TEXT | Fabricante del vehiculo (Chevrolet, Mazda, etc.) |
-| `linea` | TEXT | Linea o modelo comercial |
-| `modelo` | INTEGER | Ano de fabricacion |
-| `color` | TEXT | Color predominante |
-| `propietario` | TEXT | Nombre completo del titular |
-| `cedula_propietario` | TEXT | Documento de identidad |
-| `municipio_registro` | TEXT | Secretaria de transito de matricula |
-| `multas_simit` | INTEGER | Cantidad de infracciones registradas |
-| `valor_multas` | REAL | Total adeudado en COP |
-| `detalle_multas` | TEXT | Descripcion de comparendos vigentes |
-| `soat_vigente` | INTEGER | 1 = Vigente, 0 = Vencido |
-| `soat_vencimiento` | TEXT | Fecha limite de cobertura |
-| `tecnomecanica_vigente`| INTEGER | 1 = Vigente, 0 = Vencido |
-| `reporte_hurto` | INTEGER | 1 = Requerido por la Policia Nacional |
-| `orden_inmovilizacion` | INTEGER | 1 = Orden de captura o inmovilizacion |
-| `observaciones` | TEXT | Notas de transito o historial policial |
+- **Desde la terminal:**  
+  ```bash
+  python server.py
+  ```
 
-### Registrar Nuevas Placas
+Una vez que la consola indique que el servidor inició:
+1. Abre tu navegador web (Chrome, Edge, Firefox).
+2. Ingresa a la URL: **`http://localhost:8000`**
+3. Verás la transmisión de video en vivo, las placas detectadas y las tarjetas de antecedentes con su **Riesgo Difuso** y el diagnóstico de la **Red Neuronal**.
 
-Para anadir vehiculos de prueba a la base de datos, ejecuta:
-```bash
-python registrar_placa.py
+---
+
+## 📁 Estructura del Repositorio
+
 ```
-O realiza una peticion POST a la API REST:
-```bash
-curl -X POST "http://localhost:8000/api/register_vehicle" \
-     -H "Content-Type: application/json" \
-     -d "{\"placa\": \"ABC123\", \"tipo\": \"CARRO\", \"marca\": \"TOYOTA\", \"multas_simit\": 0, \"soat_vigente\": 1}"
+deteccion_placas/
+├── data/
+│   ├── antecedentes.db          # Base de datos SQLite (marca, multas, SOAT, hurto)
+│   ├── historial_capturas.json  # Registro de capturas realizadas
+│   └── video_prueba.mp4         # Video de validación sin cámara física
+├── models/
+│   └── plate_detector/best.pt   # Pesos YOLOv8 especializados en placas
+├── modules/
+│   ├── camera_stream.py         # Captura multihilo y buffer DirectShow (30 FPS)
+│   ├── database.py              # Consultas SQLite indexadas con Árbol B (< 0.2 ms)
+│   ├── fuzzy_inference.py       # Sistema de Inferencia Difuso Mamdani + COG
+│   ├── heuristic_optimizer.py   # Algoritmos Genéticos y PSO
+│   ├── ml_classifier.py         # Red Neuronal MLP + Backpropagation + Métricas
+│   ├── search_engine.py         # Motor de búsqueda en 3 capas + RapidFuzz
+│   ├── tracker.py               # Rastreo IoU, EMA y buffer Best-Shot
+│   └── vision_ocr.py            # Detección y normalización sintáctica colombiana
+├── templates/
+│   └── index.html               # Panel web responsivo con WebSockets y telemetría
+├── iniciar.bat                  # Lanzador del servidor web en Windows
+├── probar_ic.bat                # Ejecutable directo de pruebas de IC
+├── server.py                    # Servidor FastAPI + WebSocket
+├── test_computational_intelligence.py  # Suite de verificación científica
+└── requirements.txt             # Dependencias del proyecto
 ```
 
 ---
 
-## Documentacion de API y WebSockets
+## 📡 Endpoints de la API REST
 
-El servidor expone endpoints estandarizados para integracion externa:
-
-| Metodo | Endpoint | Descripcion |
-|---|---|---|
-| `GET` | `/` | Retorna la interfaz web principal del panel de control |
-| `GET` | `/video_feed` | Stream continuo de video MJPEG con reticulas y telemetria HUD |
-| `POST` | `/api/capture_frame` | Captura fotograma actual, procesa OCR y consulta antecedentes |
-| `GET` | `/api/plates` | Lista el historial completo de placas registradas en la sesion |
-| `GET` | `/api/antecedentes/{placa}` | Consulta antecedentes policiales y de transito para una placa |
-| `POST` | `/api/set_source` | Cambia la fuente activa de video (indice de camara o URL de stream) |
-| `POST` | `/api/toggle_roi` | Conmuta el estado del encuadre optico |
-| `GET` | `/api/status` | Retorna metricas de rendimiento (FPS camara, FPS OCR, latencia) |
-| `POST` | `/api/clear` | Limpia el historial visual y el buffer en memoria |
-| `WS` | `/ws` | Canal WebSocket para eventos `NEW_PLATE`, `UPDATE_PLATE` y `TELEMETRY` |
-
----
-
-## Benchmark y Rendimiento
-
-Mediciones realizadas en procesador estandar de consumo (Intel Core i7 12a Gen, sin GPU dedicada):
-
-- **Inferencia de Deteccion YOLOv8:** 35 ms a 85 ms por cuadro.
-- **Rastreo IoU + Suavizado:** < 2 ms por cuadro.
-- **Inferencia OCR Local (EasyOCR):** 280 ms a 450 ms por recorte vehicular.
-- **Consulta de Antecedentes SQLite:** < 1 ms por placa.
-- **Tasa de Cuadros en Pantalla:** 28 a 30 FPS constantes.
-- **Precision Sintactica:** 100% de cumplimiento con el estandar del Ministerio de Transporte de Colombia.
-
----
-
-## Licencia
-
-Proyecto desarrollado con fines academicos y de investigacion para la asignatura de **Inteligencia Computacional**.
-Distribuido bajo la Licencia MIT.
+- `GET /api/plates`: Retorna el historial de placas detectadas en memoria.
+- `GET /api/antecedentes/{placa}`: Consulta antecedentes, cálculo difuso de riesgo y perfil de reincidencia.
+- `GET /api/ic/metrics`: Retorna métricas formales del modelo (Accuracy, F1-Score, Matriz de Confusión, Estado Difuso).
+- `POST /api/ic/run_genetic_optimization`: Dispara una calibración estocástica sobre el fotograma actual.
+- `POST /api/register_vehicle`: Permite registrar nuevos vehículos en la base de datos de antecedentes.
