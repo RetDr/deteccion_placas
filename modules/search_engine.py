@@ -232,12 +232,12 @@ def consultar_placa(placa_raw: str) -> dict:
     return {
         "placa_consultada": placa_limpia,
         "placa_encontrada": None,
-        "metodo_usado": "INDEXADA",
+        "metodo_usado": "NO_CENSADO",
         "encontrado": False,
-        "nivel_alerta": "VERDE",
+        "nivel_alerta": "NO_REGISTRADO",
         "similitud": 0.0,
         "datos": datos_base,
-        "mensaje": "Placa no encontrada en la base de datos de antecedentes."
+        "mensaje": "Placa no registrada en la base de datos local."
     }
 
 

@@ -2,25 +2,49 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistema ANPR - Reconocimiento de Placas en Tiempo Real</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema ANPR Colombia | Reconocimiento Vehicular y Antecedentes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-base: #0B0E14;
-            --bg-surface: #141821;
-            --bg-elevated: #1C2230;
-            --border-subtle: #2A3245;
-            --border-active: #00E676;
-            --text-primary: #EDF2F7;
-            --text-secondary: #8C9BAB;
-            --text-muted: #5A6678;
-            --color-car: #00E676;
-            --color-moto: #FFB300;
-            --plate-yellow: #FFD200;
-            --plate-border: #111111;
-            --color-alert-red: #FF1744;
-            --color-alert-yellow: #FFB300;
-            --color-alert-green: #00E676;
+            --bg-body: #0B0F17;
+            --bg-card: #151C28;
+            --bg-card-hover: #1A2333;
+            --bg-elevated: #1F2A3D;
+            --bg-input: #101623;
+            --border-subtle: #243044;
+            --border-focus: #3B82F6;
+            
+            --text-main: #F8FAFC;
+            --text-secondary: #94A3B8;
+            --text-muted: #64748B;
+            
+            --primary: #2563EB;
+            --primary-hover: #1D4ED8;
+            --primary-soft: rgba(37, 99, 235, 0.12);
+
+            --emerald: #10B981;
+            --emerald-soft: rgba(16, 185, 129, 0.12);
+            --emerald-border: rgba(16, 185, 129, 0.3);
+
+            --amber: #F59E0B;
+            --amber-soft: rgba(245, 158, 11, 0.12);
+            --amber-border: rgba(245, 158, 11, 0.3);
+
+            --rose: #EF4444;
+            --rose-soft: rgba(239, 68, 68, 0.14);
+            --rose-border: rgba(239, 68, 68, 0.35);
+
+            --plate-yellow: #FBC02D;
+            --plate-border: #1E293B;
+
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-full: 9999px;
+            --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
         }
 
         * {
@@ -30,140 +54,209 @@
         }
 
         body {
-            background-color: var(--bg-base);
-            color: var(--text-primary);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow-x: hidden;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }
 
         /* Top Header */
         header {
-            background-color: var(--bg-surface);
+            background-color: var(--bg-card);
             border-bottom: 1px solid var(--border-subtle);
-            padding: 12px 20px;
+            padding: 12px 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 12px;
             position: sticky;
             top: 0;
             z-index: 100;
         }
 
-        .header-title {
+        .brand-container {
             display: flex;
             align-items: center;
             gap: 12px;
-            flex-wrap: wrap;
         }
 
-        .system-code {
-            font-family: "SF Mono", Consolas, Monaco, monospace;
-            font-size: 0.75rem;
-            letter-spacing: 1.5px;
-            background: var(--bg-elevated);
-            padding: 4px 10px;
-            border-radius: 4px;
-            color: var(--border-active);
-            border: 1px solid rgba(0, 230, 118, 0.3);
-            white-space: nowrap;
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #2563EB, #1D4ED8);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+        }
+
+        .brand-text h1 {
+            font-size: 1.05rem;
             font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.01em;
         }
 
-        h1 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            color: var(--text-primary);
-        }
-
-        .header-status {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .status-pill {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.8rem;
+        .brand-text p {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
             font-weight: 500;
-            letter-spacing: 0.5px;
-            background: rgba(0, 230, 118, 0.08);
-            border: 1px solid rgba(0, 230, 118, 0.3);
-            color: var(--border-active);
+        }
+
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
             padding: 5px 12px;
-            border-radius: 20px;
-            white-space: nowrap;
+            border-radius: var(--radius-full);
+            background: var(--emerald-soft);
+            color: var(--emerald);
+            border: 1px solid var(--emerald-border);
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--border-active);
+        .status-chip-dot {
+            width: 7px;
+            height: 7px;
+            background-color: var(--emerald);
             border-radius: 50%;
-            box-shadow: 0 0 8px var(--border-active);
-            animation: pulse 2s infinite;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
+        .btn-link-subtle {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        /* Main Workspace */
+        .btn-link-subtle:hover {
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            border-color: #3B82F6;
+        }
+
+        /* Banner de Alerta Dinámica */
+        #alert-banner {
+            display: none;
+            padding: 10px 24px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            animation: slideDown 0.25s ease-out;
+        }
+
+        #alert-banner.alerta-roja {
+            background-color: var(--rose-soft);
+            color: #FCA5A5;
+            border-bottom: 1px solid var(--rose-border);
+            display: flex;
+        }
+
+        #alert-banner.alerta-amarilla {
+            background-color: var(--amber-soft);
+            color: #FCD34D;
+            border-bottom: 1px solid var(--amber-border);
+            display: flex;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Main Workspace Grid */
         main {
             flex: 1;
             display: grid;
-            grid-template-columns: 1fr 440px;
-            gap: 16px;
-            padding: 16px;
+            grid-template-columns: minmax(0, 1.25fr) minmax(420px, 480px);
+            gap: 20px;
+            padding: 16px 24px;
             height: calc(100vh - 65px);
             overflow: hidden;
+            align-items: start;
         }
 
-        /* Left Panel - Live Video */
-        .viewport-panel {
-            background-color: var(--bg-surface);
+        /* Left Column: Viewport Panel (FIJO Y ANCLADO EN PANTALLA) */
+        .video-workspace {
+            background-color: var(--bg-card);
             border: 1px solid var(--border-subtle);
-            border-radius: 8px;
+            border-radius: var(--radius-lg);
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            min-height: 0;
+            box-shadow: var(--shadow-card);
+            position: sticky;
+            top: 14px;
+            height: calc(100vh - 95px);
+            max-height: 860px;
         }
 
-        .viewport-toolbar {
-            background: var(--bg-surface);
-            padding: 10px 14px;
+        .video-header {
+            padding: 12px 18px;
             border-bottom: 1px solid var(--border-subtle);
             display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: center;
+            gap: 12px;
             flex-wrap: wrap;
-            gap: 8px;
         }
 
-        .viewport-controls {
+        .select-source-wrap {
             display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
             align-items: center;
+            gap: 8px;
+            flex: 1;
+            max-width: 320px;
         }
 
-        .btn {
-            background: var(--bg-elevated);
-            color: var(--text-primary);
+        .select-custom {
+            width: 100%;
+            background-color: var(--bg-input);
             border: 1px solid var(--border-subtle);
+            color: var(--text-main);
             padding: 7px 12px;
+            border-radius: var(--radius-md);
             font-size: 0.8rem;
-            font-weight: 500;
-            border-radius: 4px;
+            font-family: inherit;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.15s ease;
+        }
+
+        .select-custom:focus {
+            border-color: var(--border-focus);
+        }
+
+        .btn-action-small {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            font-size: 0.76rem;
+            padding: 7px 12px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.15s ease;
             white-space: nowrap;
@@ -172,538 +265,502 @@
             gap: 6px;
         }
 
-        .btn:hover {
-            border-color: var(--text-secondary);
-            background: #232b3d;
+        .btn-action-small:hover {
+            color: var(--text-main);
+            background-color: var(--bg-elevated);
+            border-color: var(--text-muted);
         }
 
-        .btn-active {
-            background: #192D23;
-            border-color: var(--border-active);
-            color: var(--border-active);
+        .btn-action-small.active {
+            background-color: var(--primary-soft);
+            color: #60A5FA;
+            border-color: #3B82F6;
         }
 
-        .video-container {
+        /* Screen / Player Area */
+        .video-canvas-container {
             flex: 1;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             position: relative;
-            overflow: hidden;
-            min-height: 240px;
-        }
-
-        .video-stream {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-
-        .snap-container {
-            padding: 10px 14px;
-            background: var(--bg-surface);
-            border-top: 1px solid var(--border-subtle);
-        }
-
-        .btn-snap-action {
-            width: 100%;
-            padding: 12px;
-            font-size: 0.95rem;
-            font-weight: 700;
-            cursor: pointer;
-            letter-spacing: 0.5px;
-            border-radius: 6px;
-            background: linear-gradient(135deg, #00C853, #00E676);
-            color: #0B0E14;
-            border: none;
-            box-shadow: 0 4px 12px rgba(0, 230, 118, 0.25);
-            transition: all 0.2s ease;
+            background-color: #06090E;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-        }
-
-        .btn-snap-action:hover {
-            background: linear-gradient(135deg, #00E676, #69F0AE);
-            box-shadow: 0 6px 16px rgba(0, 230, 118, 0.4);
-            transform: translateY(-1px);
-        }
-
-        .btn-snap-action:active {
-            transform: translateY(1px);
-        }
-
-        .spin {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            100% { transform: rotate(360deg); }
-        }
-
-        .telemetry-bar {
-            background: var(--bg-base);
-            border-top: 1px solid var(--border-subtle);
-            padding: 8px 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-            font-family: monospace;
-            font-size: 0.76rem;
-            color: var(--text-secondary);
-        }
-
-        .telemetry-item strong {
-            color: var(--border-active);
-        }
-
-        /* Right Panel - Detections Feed */
-        .detections-panel {
-            background-color: var(--bg-surface);
-            border: 1px solid var(--border-subtle);
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
             overflow: hidden;
             min-height: 0;
         }
 
-        .detections-header {
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border-subtle);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .detections-header h2 {
-            font-size: 0.9rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: var(--text-primary);
-        }
-
-        .summary-tags {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .tag-count {
-            font-size: 0.72rem;
-            font-family: monospace;
-            background: var(--bg-elevated);
-            padding: 3px 8px;
-            border-radius: 3px;
-            color: var(--text-secondary);
-            border: 1px solid var(--border-subtle);
-        }
-
-        .tag-count strong {
-            color: var(--text-primary);
-        }
-
-        .detections-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        /* Plate Card Component */
-        .plate-card {
-            background-color: var(--bg-elevated);
-            border: 1px solid var(--border-subtle);
-            border-radius: 8px;
-            padding: 12px;
-            display: grid;
-            grid-template-columns: 130px 1fr;
-            gap: 12px;
-            animation: slideIn 0.25s ease forwards;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(-8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* ================= ALERT ANIMATIONS FOR IRREGULARITIES ================= */
-
-        /* Red Alert (Reported Stolen / Police Seizure) */
-        .card-alert-rojo {
-            border-color: #FF1744 !important;
-            animation: alert-shake 0.5s ease, pulse-red-border 2s infinite ease-in-out !important;
-            background: linear-gradient(135deg, rgba(255, 23, 68, 0.08) 0%, var(--bg-elevated) 100%) !important;
-        }
-
-        @keyframes pulse-red-border {
-            0% {
-                box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.6), inset 0 0 8px rgba(255, 23, 68, 0.15);
-                border-color: #FF1744;
-            }
-            50% {
-                box-shadow: 0 0 20px 4px rgba(255, 23, 68, 0.75), inset 0 0 16px rgba(255, 23, 68, 0.35);
-                border-color: #FF5252;
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.6), inset 0 0 8px rgba(255, 23, 68, 0.15);
-                border-color: #FF1744;
-            }
-        }
-
-        @keyframes alert-shake {
-            0%, 100% { transform: translateX(0); }
-            15%, 45%, 75% { transform: translateX(-4px); }
-            30%, 60%, 90% { transform: translateX(4px); }
-        }
-
-        .badge-red {
-            background: rgba(255, 23, 68, 0.25);
-            color: #FF1744;
-            border: 1px solid rgba(255, 23, 68, 0.8);
-            animation: badge-pulse-red 1.5s infinite ease-in-out;
-        }
-
-        @keyframes badge-pulse-red {
-            0%, 100% {
-                transform: scale(1);
-                box-shadow: 0 0 4px rgba(255, 23, 68, 0.4);
-            }
-            50% {
-                transform: scale(1.05);
-                box-shadow: 0 0 12px rgba(255, 23, 68, 0.9);
-                background: rgba(255, 23, 68, 0.45);
-                border-color: #FF1744;
-            }
-        }
-
-        /* Yellow Alert (SIMIT Fines / Expired SOAT / Tecno) */
-        .card-alert-amarillo {
-            border-color: #FFB300 !important;
-            animation: pulse-yellow-border 2.5s infinite ease-in-out !important;
-            background: linear-gradient(135deg, rgba(255, 179, 0, 0.06) 0%, var(--bg-elevated) 100%) !important;
-        }
-
-        @keyframes pulse-yellow-border {
-            0% {
-                box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.5), inset 0 0 6px rgba(255, 179, 0, 0.1);
-                border-color: #FFB300;
-            }
-            50% {
-                box-shadow: 0 0 16px 2px rgba(255, 179, 0, 0.65), inset 0 0 12px rgba(255, 179, 0, 0.25);
-                border-color: #FFD54F;
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.5), inset 0 0 6px rgba(255, 179, 0, 0.1);
-                border-color: #FFB300;
-            }
-        }
-
-        .badge-yellow {
-            background: rgba(255, 179, 0, 0.2);
-            color: #FFB300;
-            border: 1px solid rgba(255, 179, 0, 0.6);
-            animation: badge-pulse-yellow 2s infinite ease-in-out;
-        }
-
-        @keyframes badge-pulse-yellow {
-            0%, 100% {
-                transform: scale(1);
-                box-shadow: 0 0 3px rgba(255, 179, 0, 0.3);
-            }
-            50% {
-                transform: scale(1.03);
-                box-shadow: 0 0 10px rgba(255, 179, 0, 0.7);
-                background: rgba(255, 179, 0, 0.35);
-                border-color: #FFD54F;
-            }
-        }
-
-        /* Green Clean Card */
-        .card-alert-verde {
-            border-color: rgba(0, 230, 118, 0.25);
-        }
-
-        .badge-green {
-            background: rgba(0, 230, 118, 0.15);
-            color: #00E676;
-            border: 1px solid rgba(0, 230, 118, 0.4);
-        }
-
-        .alert-beacon {
-            display: inline-block;
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-
-        .beacon-red {
-            background: #FF1744;
-            box-shadow: 0 0 6px #FF1744;
-            animation: pulse 1s infinite;
-        }
-
-        .beacon-yellow {
-            background: #FFB300;
-            box-shadow: 0 0 6px #FFB300;
-            animation: pulse 1.5s infinite;
-        }
-
-        .beacon-green {
-            background: #00E676;
-        }
-
-        /* Card Content Styling */
-        .plate-card-crop {
-            background: #000;
-            border-radius: 6px;
-            border: 1px solid var(--border-subtle);
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 90px;
-            cursor: pointer;
-            position: relative;
-            transition: all 0.2s ease;
-        }
-
-        .plate-card-crop:hover {
-            border-color: var(--border-active);
-            transform: scale(1.02);
-        }
-
-        .plate-card-crop img {
+        .video-canvas-container img {
             width: 100%;
             height: 100%;
             object-fit: contain;
-            background: #0d1117;
+            display: block;
         }
 
-        .plate-card-crop .zoom-hint {
+        .overlay-hud {
             position: absolute;
-            bottom: 3px;
-            right: 4px;
-            background: rgba(0,0,0,0.75);
-            color: #EDF2F7;
-            font-size: 0.58rem;
-            padding: 2px 5px;
-            border-radius: 3px;
-            pointer-events: none;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-        }
-
-        .plate-card-crop .no-crop {
-            font-size: 0.65rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-        }
-
-        .plate-details {
+            top: 12px;
+            left: 12px;
             display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-width: 0;
+            gap: 8px;
+            z-index: 10;
         }
 
-        /* Colombian Plate Spec Badge */
-        .colombian-plate-badge {
-            background: var(--plate-yellow);
-            color: #000;
-            border: 2px solid var(--plate-border);
-            border-radius: 4px;
-            padding: 3px 10px;
+        .hud-pill {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-secondary);
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: var(--radius-full);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .hud-pill strong {
+            color: var(--text-main);
+        }
+
+        /* Video Footer Actions (SIEMPRE FIJO AL PIE DEL VIDEO) */
+        .video-footer-bar {
+            padding: 12px 18px;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background-color: var(--bg-card);
+            flex-shrink: 0;
+        }
+
+        .btn-primary-capture {
+            flex: 1;
+            background-color: var(--primary);
+            color: #ffffff;
+            border: none;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-size: 0.86rem;
+            font-weight: 600;
+            cursor: pointer;
             display: inline-flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-            align-self: flex-start;
+            gap: 8px;
+            transition: all 0.15s ease;
+            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.25);
         }
 
-        .plate-text-code {
-            font-family: "Lucida Console", "Courier New", monospace;
-            font-size: 1.3rem;
-            font-weight: 900;
-            letter-spacing: 2px;
-            line-height: 1.1;
+        .btn-primary-capture:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
         }
 
-        .plate-text-municipio {
-            font-family: -apple-system, sans-serif;
-            font-size: 0.6rem;
-            font-weight: 800;
-            letter-spacing: 1.2px;
-            text-transform: uppercase;
-            color: #222;
+        .btn-primary-capture:active {
+            transform: translateY(0);
         }
 
-        .plate-meta-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 8px;
-            font-size: 0.74rem;
-            color: var(--text-secondary);
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .type-badge {
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            padding: 2px 6px;
-            border-radius: 3px;
-        }
-
-        .type-car {
-            background: rgba(0, 230, 118, 0.12);
-            color: var(--color-car);
-            border: 1px solid rgba(0, 230, 118, 0.3);
-        }
-
-        .type-moto {
-            background: rgba(255, 179, 0, 0.12);
-            color: var(--color-moto);
-            border: 1px solid rgba(255, 179, 0, 0.3);
-        }
-
-        .alert-badge {
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            padding: 3px 8px;
-            border-radius: 4px;
-            text-transform: uppercase;
-            white-space: nowrap;
-            display: inline-flex;
-            align-items: center;
-        }
-
-        .antecedentes-box {
-            margin-top: 8px;
-            padding: 8px 10px;
-            background: var(--bg-surface);
-            border-radius: 6px;
-            font-size: 0.72rem;
-            color: var(--text-secondary);
+        /* Right Column: Detections Panel */
+        .detections-workspace {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
             display: flex;
             flex-direction: column;
-            gap: 4px;
-            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            box-shadow: var(--shadow-card);
         }
 
-        .antecedentes-row {
+        .detections-header {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--border-subtle);
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 4px;
+            flex-direction: column;
+            gap: 12px;
         }
 
-        .btn-simit {
-            display: inline-flex;
+        .detections-header-top {
+            display: flex;
             align-items: center;
-            gap: 4px;
-            margin-top: 4px;
-            font-size: 0.68rem;
-            color: #00E676;
-            text-decoration: none;
-            border: 1px solid rgba(0, 230, 118, 0.3);
-            padding: 2px 7px;
-            border-radius: 3px;
-            align-self: flex-start;
-            transition: all 0.2s ease;
+            justify-content: space-between;
+        }
+
+        .detections-header-top h2 {
+            font-size: 0.96rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.01em;
+        }
+
+        .counters-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .count-pill {
+            font-size: 0.72rem;
+            padding: 3px 9px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
             font-weight: 600;
         }
 
-        .btn-simit:hover {
-            background: rgba(0, 230, 118, 0.15);
-            border-color: #00E676;
+        .count-pill strong {
+            color: var(--text-main);
+            margin-left: 2px;
         }
 
-        .confidence-meter {
+        /* Quick Simulator Bar */
+        .simulator-bar {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 8px 12px;
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 6px;
-            font-family: monospace;
-            font-size: 0.72rem;
         }
 
-        .meter-bar {
-            width: 44px;
-            height: 5px;
-            background: var(--bg-surface);
-            border-radius: 3px;
-            overflow: hidden;
+        .simulator-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
-        .meter-fill {
-            height: 100%;
-            background: var(--border-active);
+        .sim-buttons {
+            display: flex;
+            gap: 6px;
         }
 
+        .btn-sim {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.15s ease;
+        }
+
+        .btn-sim-red {
+            background: var(--rose-soft);
+            color: #F87171;
+            border-color: var(--rose-border);
+        }
+        .btn-sim-red:hover { background: rgba(239, 68, 68, 0.25); }
+
+        .btn-sim-yellow {
+            background: var(--amber-soft);
+            color: #FBBF24;
+            border-color: var(--amber-border);
+        }
+        .btn-sim-yellow:hover { background: rgba(245, 158, 11, 0.25); }
+
+        .btn-sim-green {
+            background: var(--emerald-soft);
+            color: #34D399;
+            border-color: var(--emerald-border);
+        }
+        .btn-sim-green:hover { background: rgba(16, 185, 129, 0.25); }
+
+        /* Scrollable List */
+        .detections-list {
+            flex: 1;
+            padding: 14px 18px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .detections-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .detections-list::-webkit-scrollbar-thumb {
+            background-color: var(--border-subtle);
+            border-radius: 4px;
+        }
+
+        /* Empty State */
         .empty-state {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100%;
-            color: var(--text-muted);
-            font-size: 0.85rem;
             text-align: center;
-            gap: 8px;
-            padding: 30px;
+            padding: 48px 16px;
+            color: var(--text-muted);
+            gap: 10px;
         }
 
-        /* Lightbox Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(4px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
+        .empty-state svg {
+            color: var(--text-muted);
+            opacity: 0.6;
         }
 
-        .modal-content {
-            background: var(--bg-surface);
+        .empty-state p {
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            max-width: 280px;
+        }
+
+        /* Vehicle Card */
+        .vehicle-card {
+            background-color: var(--bg-card);
             border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            max-width: 600px;
-            width: 100%;
-            padding: 18px;
+            border-radius: var(--radius-md);
+            padding: 14px;
             display: flex;
             flex-direction: column;
-            gap: 14px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-            animation: modalFade 0.2s ease;
+            gap: 12px;
+            transition: all 0.15s ease;
+            position: relative;
         }
 
-        @keyframes modalFade {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
+        .vehicle-card:hover {
+            border-color: #3B82F6;
+            background-color: var(--bg-card-hover);
+        }
+
+        .vehicle-card.status-rojo {
+            border-left: 4px solid var(--rose);
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, rgba(21, 28, 40, 1) 100%);
+        }
+
+        .vehicle-card.status-amarillo {
+            border-left: 4px solid var(--amber);
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.05) 0%, rgba(21, 28, 40, 1) 100%);
+        }
+
+        .vehicle-card.status-verde {
+            border-left: 4px solid var(--emerald);
+        }
+
+        .vehicle-card.status-no-registrado {
+            border-left: 4px solid var(--text-muted);
+        }
+
+        /* Card Header */
+        .card-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        /* Colombian Plate Graphic Component */
+        .plate-graphic {
+            background-color: var(--plate-yellow);
+            color: #111827;
+            border: 2px solid #1E293B;
+            border-radius: 5px;
+            padding: 2px 10px;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            min-width: 110px;
+        }
+
+        .plate-graphic.white-plate {
+            background-color: #F8FAFC;
+        }
+
+        .plate-code {
+            font-family: 'Space Grotesk', 'Courier New', monospace;
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            line-height: 1.1;
+        }
+
+        .plate-city {
+            font-size: 0.58rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #334155;
+            line-height: 1;
+            margin-top: 1px;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: var(--radius-full);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .status-badge-rojo {
+            background: var(--rose-soft);
+            color: #F87171;
+            border: 1px solid var(--rose-border);
+        }
+
+        .status-badge-amarillo {
+            background: var(--amber-soft);
+            color: #FBBF24;
+            border: 1px solid var(--amber-border);
+        }
+
+        .status-badge-verde {
+            background: var(--emerald-soft);
+            color: #34D399;
+            border: 1px solid var(--emerald-border);
+        }
+
+        .status-badge-info {
+            background: rgba(148, 163, 184, 0.12);
+            color: #94A3B8;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+        }
+
+        /* Middle Grid Details */
+        .card-details-grid {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .plate-crop-thumbnail {
+            width: 80px;
+            height: 60px;
+            background-color: #06090E;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .plate-crop-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .plate-crop-thumbnail:hover::after {
+            content: "Ver";
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.7);
+            color: #fff;
+            font-size: 0.65rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .meta-specs {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.76rem;
+        }
+
+        .meta-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-secondary);
+        }
+
+        .meta-row strong {
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        /* Card Footer Infractions & Actions */
+        .card-alert-note {
+            background-color: var(--bg-input);
+            border-radius: var(--radius-sm);
+            padding: 8px 10px;
+            font-size: 0.73rem;
+            color: var(--text-secondary);
+            border-left: 3px solid var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .card-alert-note.note-rojo {
+            border-color: var(--rose);
+            color: #FECACA;
+            background: rgba(239, 68, 68, 0.08);
+        }
+
+        .card-alert-note.note-amarillo {
+            border-color: var(--amber);
+            color: #FDE68A;
+            background: rgba(245, 158, 11, 0.08);
+        }
+
+        .card-alert-note.note-verde {
+            border-color: var(--emerald);
+            color: #A7F3D0;
+            background: rgba(16, 185, 129, 0.08);
+        }
+
+        .btn-simit-portal {
+            background-color: var(--bg-elevated);
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 0.68rem;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+
+        .btn-simit-portal:hover {
+            background-color: #3B82F6;
+            color: #fff;
+        }
+
+        /* Modal Preview */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(3, 7, 18, 0.75);
+            backdrop-filter: blur(6px);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
         }
 
         .modal-header {
@@ -714,72 +771,40 @@
 
         .modal-header h3 {
             font-size: 1rem;
-            color: var(--text-primary);
+            font-weight: 700;
         }
 
-        .modal-img-container {
-            background: #000;
-            border-radius: 8px;
-            border: 1px solid var(--border-subtle);
-            overflow: hidden;
+        .btn-close-modal {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+        }
+        .btn-close-modal:hover { color: var(--text-main); }
+
+        .modal-img-wrapper {
+            background: #030712;
+            border-radius: var(--radius-md);
+            padding: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            max-height: 320px;
+            min-height: 180px;
         }
 
-        .modal-img-container img {
+        .modal-img-wrapper img {
             max-width: 100%;
-            max-height: 320px;
+            max-height: 280px;
             object-fit: contain;
+            border-radius: var(--radius-sm);
         }
 
-        .btn-modal-close {
-            background: var(--bg-elevated);
-            color: var(--text-primary);
-            border: 1px solid var(--border-subtle);
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            align-self: flex-end;
-            font-weight: 600;
-            font-size: 0.82rem;
-        }
-
-        .btn-modal-close:hover {
-            border-color: var(--border-active);
-            color: var(--border-active);
-        }
-
-        /* ================= RESPONSIVE DESIGN BREAKPOINTS ================= */
-        @media (max-width: 1024px) {
-            main {
-                grid-template-columns: 1fr 360px;
-                gap: 12px;
-                padding: 12px;
-            }
-
-            .plate-card {
-                grid-template-columns: 110px 1fr;
-                gap: 10px;
-            }
-
-            .plate-text-code {
-                font-size: 1.15rem;
-                letter-spacing: 1.5px;
-            }
-        }
-
-        @media (max-width: 860px) {
+        /* Responsive */
+        @media (max-width: 960px) {
             body {
-                height: auto;
                 overflow-y: auto;
             }
-
-            header {
-                padding: 10px 14px;
-            }
-
             main {
                 display: flex;
                 flex-direction: column;
@@ -788,220 +813,191 @@
                 padding: 12px;
                 gap: 16px;
             }
-
-            .viewport-panel {
-                min-height: auto;
-                overflow: visible;
-            }
-
-            .video-container {
-                min-height: 260px;
-                height: 52vw;
-                max-height: 480px;
-            }
-
-            .viewport-toolbar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .viewport-controls {
-                flex-direction: row;
-                width: 100%;
-            }
-
-            .viewport-controls .btn, 
-            .viewport-controls select {
-                flex: 1 1 calc(50% - 8px);
-                min-width: 140px;
-                text-align: center;
-                justify-content: center;
-            }
-
-            .telemetry-bar {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-            }
-
-            .detections-panel {
+            .video-workspace {
+                position: sticky;
+                top: 0;
+                z-index: 100;
                 height: auto;
                 max-height: none;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+            }
+            .video-canvas-container {
+                height: 280px;
+                min-height: 200px;
+            }
+            .detections-workspace {
+                height: auto;
                 overflow: visible;
-            }
-
-            .detections-list {
-                max-height: 550px;
-                overflow-y: auto;
-            }
-        }
-
-        @media (max-width: 540px) {
-            header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 8px;
-            }
-
-            .header-status {
-                width: 100%;
-                justify-content: space-between;
-            }
-
-            h1 {
-                font-size: 0.95rem;
-            }
-
-            .viewport-controls .btn, 
-            .viewport-controls select {
-                flex: 1 1 100%;
-            }
-
-            .telemetry-bar {
-                grid-template-columns: 1fr;
-                font-size: 0.72rem;
-            }
-
-            .plate-card {
-                grid-template-columns: 1fr;
-            }
-
-            .plate-card-crop {
-                height: 120px;
-            }
-
-            .btn-snap-action {
-                font-size: 0.88rem;
-                padding: 11px;
             }
         }
     </style>
 </head>
 <body>
+
+    <!-- Header Superior -->
     <header>
-        <div class="header-title">
-            <span class="system-code">ANPR COLOMBIA</span>
-            <h1>SISTEMA DE RECONOCIMIENTO DE PLACAS VEHICULARES</h1>
-        </div>
-        <div class="header-status">
-            <div class="status-pill">
-                <span class="status-dot"></span>
-                <span>MOTOR ACTIVO</span>
+        <div class="brand-container">
+            <div class="brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="5" width="20" height="14" rx="3"></rect>
+                    <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
             </div>
+            <div class="brand-text">
+                <h1>Sistema ANPR Colombia</h1>
+                <p>Visión Computacional & Antecedentes de Tránsito</p>
+            </div>
+        </div>
+
+        <div class="header-meta">
+            <div class="status-chip">
+                <span class="status-chip-dot"></span>
+                <span>Motor Activo</span>
+            </div>
+            <button class="btn-link-subtle" onclick="abrirModalConfig()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>Configuración</span>
+            </button>
         </div>
     </header>
 
+    <!-- Banner Flotante para Alertas Urgentes -->
+    <div id="alert-banner">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <svg id="alert-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span id="alert-banner-text">Alerta detectada</span>
+        </div>
+        <button onclick="cerrarAlertBanner()" style="background:transparent; border:none; color:inherit; cursor:pointer; font-size:1.1rem;">&times;</button>
+    </div>
+
+    <!-- Área de Trabajo Principal -->
     <main>
-        <!-- Panel Izquierdo: Video en Vivo -->
-        <section class="viewport-panel">
-            <div class="viewport-toolbar">
-                <div class="viewport-controls">
-                    <select class="btn" id="select-source" onchange="onSourceChange(this.value)" style="cursor: pointer;">
-                        <option value="1" selected>FUENTE: CAMARA 1 (USB / CELULAR)</option>
-                        <option value="0">FUENTE: CAMARA 0 (WEBCAM LAPTOP)</option>
-                        <option value="2">FUENTE: CAMARA 2 (SECUNDARIA)</option>
-                        <option value="file">FUENTE: VIDEO ARCHIVO</option>
-                        <option value="custom">FUENTE: STREAM IP / DROIDCAM</option>
+        <!-- Columna Izquierda: Video y Controles -->
+        <section class="video-workspace">
+            <div class="video-header">
+                <div class="select-source-wrap">
+                    <select class="select-custom" id="select-source" onchange="cambiarFuenteCamara(this.value)">
+                        <option value="0" selected>Cámara 0: Integrada / Webcam</option>
+                        <option value="1">Cámara 1: USB / Celular</option>
+                        <option value="file">Video local: video_prueba.mp4</option>
+                        <option value="custom">Dirección de red / IP Webcam...</option>
                     </select>
-                    <button class="btn" onclick="actualizarListaCamaras()" title="Escanear y detectar camaras conectadas">ACTUALIZAR CAMARAS</button>
-                    <button class="btn btn-active" id="btn-roi" onclick="toggleRoi()">ENCUADRE OPTICO: ACTIVO</button>
-                    <button class="btn" id="btn-simit-status" onclick="abrirModalSimit()">SIMIT: CONECTADO</button>
-                    <button class="btn" id="btn-gemini" onclick="configurarGemini()">MOTOR: LOCAL (EasyOCR)</button>
+                    <button class="btn-action-small" onclick="refrescarCamaras()" title="Detectar cámaras de forma instantánea">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                    </button>
                 </div>
-                <div style="font-size: 0.78rem; color: var(--text-secondary);">
-                    ESTADO: <strong id="lbl-source" style="color: var(--border-active);">LISTO</strong>
+
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-action-small active" id="btn-roi" onclick="toggleRoi()">
+                        <span>Encuadre Óptico</span>
+                    </button>
                 </div>
             </div>
 
-            <div class="video-container">
-                <img id="video-stream" class="video-stream" src="/video_feed" alt="Transmision de video en vivo">
+            <!-- Visor de Video con HUD -->
+            <div class="video-canvas-container">
+                <div class="overlay-hud">
+                    <div class="hud-pill">FPS: <strong id="val-fps">0.0</strong></div>
+                    <div class="hud-pill">Latencia: <strong id="val-latency">0</strong> ms</div>
+                    <div class="hud-pill">Fuente: <strong id="val-source">Cámara 0</strong></div>
+                </div>
+
+                <img id="video-stream" src="/video_feed" alt="Transmisión en vivo">
             </div>
 
-            <div class="snap-container">
-                <button class="btn-snap-action" id="btn-snap" onclick="capturarYConsultar()">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Botón Principal de Captura Manual -->
+            <div class="video-footer-bar">
+                <button class="btn-primary-capture" id="btn-snap" onclick="capturarManual()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                         <circle cx="12" cy="13" r="4"></circle>
                     </svg>
-                    <span>TOMAR FOTO Y CONSULTAR PLACA (ESPACIO)</span>
+                    <span>Capturar y Reconocer Placa</span>
+                    <span style="font-size:0.72rem; opacity:0.8; font-weight:normal;">(Barra espaciadora)</span>
                 </button>
-            </div>
-
-            <div class="telemetry-bar">
-                <div class="telemetry-item">FPS CAMARA: <strong id="val-fps">0.0</strong></div>
-                <div class="telemetry-item">FPS OCR: <strong id="val-ocr-fps">0.0</strong></div>
-                <div class="telemetry-item">LATENCIA: <strong id="val-latency">0.0</strong> ms</div>
-                <div class="telemetry-item">CUADROS: <strong id="val-frames">0</strong></div>
             </div>
         </section>
 
-        <!-- Panel Derecho: Registro de Placas Detectadas -->
-        <section class="detections-panel">
+        <!-- Columna Derecha: Panel de Detecciones y Antecedentes -->
+        <section class="detections-workspace">
             <div class="detections-header">
-                <h2>REGISTRO DE PLACAS</h2>
-                <div class="summary-tags">
-                    <span class="tag-count">TOTAL: <strong id="cnt-total">0</strong></span>
-                    <span class="tag-count">AUTOS: <strong id="cnt-autos">0</strong></span>
-                    <span class="tag-count">MOTOS: <strong id="cnt-motos">0</strong></span>
-                    <button class="btn" style="padding: 3px 8px; font-size: 0.70rem; margin-left: 4px;" onclick="limpiarRegistros()">LIMPIAR</button>
+                <div class="detections-header-top">
+                    <h2>Registro de Detecciones</h2>
+                    <div class="counters-bar">
+                        <span class="count-pill">Total: <strong id="cnt-total">0</strong></span>
+                        <span class="count-pill">Autos: <strong id="cnt-autos">0</strong></span>
+                        <span class="count-pill">Motos: <strong id="cnt-motos">0</strong></span>
+                        <button class="btn-action-small" onclick="limpiarRegistros()" style="padding: 3px 8px; font-size: 0.70rem;">Limpiar</button>
+                    </div>
+                </div>
+
+                <!-- Barra de Pruebas Rápidas para Demostración -->
+                <div class="simulator-bar">
+                    <span class="simulator-title">Pruebas Rápidas:</span>
+                    <div class="sim-buttons">
+                        <button class="btn-sim btn-sim-red" onclick="simularAlerta('FRT890')" title="Simular vehículo hurtado">🔴 Hurto</button>
+                        <button class="btn-sim btn-sim-yellow" onclick="simularAlerta('XYZ45E')" title="Simular multas SIMIT">🟡 Multas</button>
+                        <button class="btn-sim btn-sim-green" onclick="simularAlerta('ABC123')" title="Simular vehículo al día">🟢 Al Día</button>
+                    </div>
                 </div>
             </div>
 
+            <!-- Lista de Tarjetas de Vehículos -->
             <div class="detections-list" id="plates-container">
                 <div class="empty-state" id="empty-state">
-                    <span>SIN DETECCIONES REGISTRADAS</span>
-                    <span style="font-size: 0.75rem;">El sistema registrará automáticamente las placas y fotogramas detectados.</span>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
+                    <p>Esperando vehículos frente a la cámara para iniciar la identificación.</p>
                 </div>
             </div>
         </section>
     </main>
 
-    <!-- Modal para Inspeccionar Fotograma Guardado en Alta Definición -->
-    <div class="modal-overlay" id="crop-modal" onclick="cerrarModalFotograma(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+    <!-- Modal de Inspección de Recorte -->
+    <div class="modal-backdrop" id="crop-modal" onclick="cerrarModalFotograma(event)">
+        <div class="modal-card" onclick="event.stopPropagation()">
             <div class="modal-header">
-                <h3 id="modal-title">FOTOGRAMA DE PLACA</h3>
-                <span id="modal-badge"></span>
+                <h3 id="modal-title">Fotograma de Placa</h3>
+                <button class="btn-close-modal" onclick="cerrarModalFotograma()">&times;</button>
             </div>
-            <div class="modal-img-container">
+            <div class="modal-img-wrapper">
                 <img id="modal-img" src="" alt="Fotograma ampliado">
             </div>
-            <div id="modal-meta" style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;"></div>
-            <button class="btn-modal-close" onclick="cerrarModalFotograma()">CERRAR</button>
+            <div id="modal-meta" style="font-size:0.8rem; color:var(--text-secondary); line-height:1.6;"></div>
         </div>
     </div>
 
-    <!-- Modal para Configuración y Estado de Conexión SIMIT -->
-    <div class="modal-overlay" id="simit-modal" onclick="cerrarModalSimit(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+    <!-- Modal de Configuración SIMIT / Gemini -->
+    <div class="modal-backdrop" id="config-modal" onclick="cerrarModalConfig(event)">
+        <div class="modal-card" onclick="event.stopPropagation()">
             <div class="modal-header">
-                <h3>CONEXION SIMIT (FEDERACION COLOMBIANA DE MUNICIPIOS)</h3>
+                <h3>Ajustes del Sistema</h3>
+                <button class="btn-close-modal" onclick="cerrarModalConfig()">&times;</button>
             </div>
-            <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size:0.82rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:12px;">
                 <div>
-                    <strong>Estado actual:</strong> <span id="simit-provider-lbl" style="color: var(--border-active); font-weight: 700;">BASE LOCAL SQLITE (SINCRONIZADA)</span>
+                    <label style="font-weight:600; color:var(--text-main); display:block; margin-bottom:4px;">Google Gemini 1.5 Flash (Opcional):</label>
+                    <input type="text" id="gemini-key-input" placeholder="Ingresa tu clave de API Gemini (deja vacío para EasyOCR local)" style="width:100%; padding:8px 10px; background:var(--bg-input); border:1px solid var(--border-subtle); color:var(--text-main); border-radius:var(--radius-sm); font-size:0.8rem;">
                 </div>
-                <div>
-                    La base de datos local SQLite contiene los registros de antecedentes, multas y comparendos SIMIT para consultas instantáneas en menos de 0.2 ms.
+                <div style="background:var(--bg-input); padding:10px; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+                    <strong>Conexión SIMIT:</strong><br>
+                    El sistema consulta de forma instantánea la base local SQLite indexada y la API abierta oficial SODA (datos.gov.co).
                 </div>
-                <div style="background: var(--bg-elevated); padding: 10px; border-radius: 6px; border: 1px solid var(--border-subtle);">
-                    <strong>Opciones de Conexión en Línea:</strong>
-                    <ul style="margin-left: 18px; margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
-                        <li><strong>Base Local Indexada:</strong> Activa por defecto (sin necesidad de API Key ni latencia de red).</li>
-                        <li><strong>Gateway REST Oficial (Verifik / PlacApi):</strong> Permite sincronizar multas en vivo por cada vehículo reconocido.</li>
-                        <li><strong>Portal Oficial FCM:</strong> Enlace directo disponible en cada tarjeta de vehículo.</li>
-                    </ul>
-                </div>
-                <div>
-                    <label style="font-weight: 600; display: block; margin-bottom: 4px;">Configurar Token / API Key de Proveedor SIMIT (Opcional):</label>
-                    <input type="text" id="simit-api-key" placeholder="Ingresa token de Verifik / PlacApi o deja vacio" style="width: 100%; padding: 8px 10px; background: var(--bg-base); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 4px; font-size: 0.8rem;">
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                <a href="https://www.fcm.org.co/simit/#/home-public" target="_blank" class="btn-simit" style="padding: 6px 12px; font-size: 0.78rem;">ABRIR PORTAL OFICIAL SIMIT</a>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-active" onclick="guardarConfiguracionSimit()">GUARDAR</button>
-                    <button class="btn-modal-close" onclick="cerrarModalSimit()">CERRAR</button>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+                    <button class="btn-action-small" onclick="cerrarModalConfig()">Cancelar</button>
+                    <button class="btn-primary-capture" style="padding:7px 14px; font-size:0.8rem;" onclick="guardarAjustes()">Guardar</button>
                 </div>
             </div>
         </div>
@@ -1011,11 +1007,52 @@
         const platesContainer = document.getElementById("plates-container");
         const emptyState = document.getElementById("empty-state");
         const registeredPlates = new Map();
-
         let countAutos = 0;
         let countMotos = 0;
 
-        // WebSocket para actualización instantánea en tiempo real
+        // Sonido suave de notificación (Web Audio API sintetizada, elegante)
+        let audioCtx = null;
+        function playChime(tipoAlerta) {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (tipoAlerta === "ROJO") {
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime); // A4
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.12); // A5
+                    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                } else if (tipoAlerta === "AMARILLO") {
+                    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.3);
+                }
+            } catch(e) {}
+        }
+
+        // Mostrar Banner de Alerta
+        function mostrarAlertaBanner(placa, mensaje, tipo) {
+            const banner = document.getElementById("alert-banner");
+            const text = document.getElementById("alert-banner-text");
+            banner.className = tipo === "ROJO" ? "alerta-roja" : "alerta-amarilla";
+            text.innerHTML = `<strong>${tipo === 'ROJO' ? 'ALERTA POLICIAL' : 'ALERTA DE TRÁNSITO'}:</strong> Placa ${placa} — ${mensaje}`;
+            playChime(tipo);
+        }
+
+        function cerrarAlertBanner() {
+            const banner = document.getElementById("alert-banner");
+            banner.style.display = "none";
+            banner.className = "";
+        }
+
+        // WebSocket en tiempo real
         let wsInstance = null;
         function connectWebSocket() {
             if (wsInstance && wsInstance.readyState === WebSocket.OPEN) return;
@@ -1035,41 +1072,26 @@
             };
 
             wsInstance.onclose = () => {
-                setTimeout(connectWebSocket, 1200);
+                setTimeout(connectWebSocket, 1500);
             };
         }
 
-        // Sincronización continua de respaldo (garantiza recepción infalible de placas en vivo)
-        setInterval(async () => {
-            try {
-                const res = await fetch("/api/plates");
-                const list = await res.json();
-                if (Array.isArray(list)) {
-                    list.forEach(renderPlate);
-                }
-            } catch (err) {}
-        }, 1500);
-
         function updateTelemetry(data) {
             document.getElementById("val-fps").innerText = Number(data.camera_fps || 0).toFixed(1);
-            document.getElementById("val-ocr-fps").innerText = Number(data.ocr_fps || 0).toFixed(1);
-            document.getElementById("val-latency").innerText = Number(data.inference_latency_ms || 0).toFixed(1);
-            document.getElementById("val-frames").innerText = data.total_frames_analyzed || 0;
+            document.getElementById("val-latency").innerText = Math.round(data.inference_latency_ms || 0);
         }
 
+        // Renderizado Limpio de Tarjeta de Vehículo
         function renderPlate(data) {
-            if (emptyState) {
-                emptyState.style.display = "none";
-            }
+            if (!data || !data.placa) return;
+            if (emptyState) emptyState.style.display = "none";
 
             const plateId = `plate-${data.placa}`;
-            const isCar = data.tipo === "CARRO";
+            const isCar = data.tipo !== "MOTO";
             const confPct = Math.round((data.confianza || 0.8) * 100);
 
             let card = document.getElementById(plateId);
-
             if (!card) {
-                // Nueva placa detectada
                 if (isCar) countAutos++; else countMotos++;
                 document.getElementById("cnt-autos").innerText = countAutos;
                 document.getElementById("cnt-motos").innerText = countMotos;
@@ -1077,200 +1099,122 @@
 
                 card = document.createElement("div");
                 card.id = plateId;
-                card.className = "plate-card";
                 platesContainer.prepend(card);
             }
 
             registeredPlates.set(data.placa, data);
 
-            const cropImgHtml = data.crop_base64
-                ? `<img src="data:image/jpeg;base64,${data.crop_base64}" alt="Fotograma ${data.placa}"><span class="zoom-hint">AMPLIAR</span>`
-                : `<span class="no-crop">SIN RECORTE</span>`;
+            const ant = data.antecedentes || {};
+            const alerta = ant.nivel_alerta || (data.es_dudosa ? "AMARILLO" : "NO_REGISTRADO");
+            const d = ant.datos || {};
 
-            const isDudosa = data.es_dudosa || data.placa === "DUDOSA";
-            const typeClass = isCar ? "type-car" : (isDudosa ? "type-moto" : "type-moto");
-            const typeLabel = isDudosa ? "BAJA CONFIANZA" : (isCar ? "AUTOMOVIL" : "MOTOCICLETA");
-            const municipio = data.municipio || "COLOMBIA";
+            // Determinar estilo y estado del semáforo
+            let statusClass = "status-no-registrado";
+            let badgeHtml = `<span class="status-badge status-badge-info">Sin Registro en BD</span>`;
+            let noteClass = "note-verde";
+            let noteHtml = `Placa detectada. No reporta novedades en base de datos.`;
 
-            let alertaHtml = "";
-            let infoAntecedentesHtml = "";
-            let alertClass = "card-alert-verde";
-
-            if (isDudosa) {
-                alertClass = "card-alert-amarillo";
-                alertaHtml = `<span class="alert-badge badge-yellow"><span class="alert-beacon beacon-yellow"></span>LECTURA DUDOSA (${confPct}%)</span>`;
-                infoAntecedentesHtml = `
-                    <div class="antecedentes-box" style="border-left: 3px solid #FFB300;">
-                        <div style="font-size: 0.72rem; color: #FFB300; font-weight: 600; margin-bottom: 2px;">
-                            DIAGNOSTICO DEL DETECTOR:
-                        </div>
-                        <div style="font-size: 0.70rem; color: #C9D1D9;">
-                            ${data.mensaje_diagnostico || 'Resolución o iluminación insuficiente. Mantén la placa en la pantalla, el sistema está intentando mejorarla en cada cuadro.'}
-                        </div>
-                    </div>
-                `;
-            } else if (data.antecedentes) {
-                const ant = data.antecedentes;
-                const alerta = ant.nivel_alerta || "VERDE";
-                const d = ant.datos || {};
-
-                let badgeClass = "badge-green";
-                let badgeText = "AL DIA - SIN MULTAS";
-                let beaconClass = "beacon-green";
-
-                if (alerta === "AMARILLO") {
-                    badgeClass = "badge-yellow";
-                    badgeText = "ALERTA SIMIT / SOAT";
-                    beaconClass = "beacon-yellow";
-                    alertClass = "card-alert-amarillo";
-                } else if (alerta === "ROJO") {
-                    badgeClass = "badge-red";
-                    badgeText = "ALERTA POLICIAL - HURTO";
-                    beaconClass = "beacon-red";
-                    alertClass = "card-alert-rojo";
-                }
-
-                alertaHtml = `<span class="alert-badge ${badgeClass}"><span class="alert-beacon ${beaconClass}"></span>${badgeText}</span>`;
-
-                const multasTxt = (d.multas_simit && d.multas_simit > 0)
-                    ? `${d.multas_simit} ($${Number(d.valor_multas || 0).toLocaleString()} COP)`
-                    : "0 ($0)";
-                const soatTxt = d.soat_vigente ? "VIGENTE" : "VENCIDO";
-                const vehiculoTxt = (d.marca && d.marca !== "NO REGISTRADO EN ANTECEDENTES")
-                    ? `${d.marca} ${d.linea || ''} (${d.modelo || ''})`
-                    : "NO CENSADO EN BD LOCAL";
-                const propTxt = d.propietario || "NO REGISTRADO";
-
-                let metodoTxt = ant.metodo_usado || 'INDEXADA';
-                if (data.auto_corregido && data.placa_raw_ocr && data.placa_raw_ocr !== data.placa) {
-                    metodoTxt += ` <span style="color:#00E676; font-size:0.7rem;">(OCR: ${data.placa_raw_ocr} &rarr; ${data.placa})</span>`;
-                }
-
-                infoAntecedentesHtml = `
-                    <div class="antecedentes-box">
-                        <div class="antecedentes-row">
-                            <span><strong>VEHICULO:</strong> ${vehiculoTxt}</span>
-                            <span>METODO: <strong>${metodoTxt}</strong></span>
-                        </div>
-                        <div class="antecedentes-row">
-                            <span><strong>PROPIETARIO:</strong> ${propTxt}</span>
-                            <span>SOAT: <strong style="color: ${d.soat_vigente ? '#00E676' : '#FF1744'}">${soatTxt}</strong></span>
-                        </div>
-                        <div class="antecedentes-row">
-                            <span>MULTAS SIMIT: <strong style="color: ${(d.multas_simit && d.multas_simit > 0) ? '#FFB300' : 'inherit'}">${multasTxt}</strong></span>
-                            <a href="https://www.fcm.org.co/simit/#/home-public" target="_blank" class="btn-simit">PORTAL SIMIT</a>
-                        </div>
-                        ${d.observaciones ? `<div style="font-size: 0.65rem; color: #8C9BAB; margin-top: 2px;">${d.observaciones}</div>` : ''}
-                    </div>
-                `;
+            if (alerta === "ROJO") {
+                statusClass = "status-rojo";
+                badgeHtml = `<span class="status-badge status-badge-rojo">Reporte de Hurto</span>`;
+                noteClass = "note-rojo";
+                noteHtml = `<strong>Atención Policial:</strong> Vehículo reportado por hurto o inmovilización.`;
+                mostrarAlertaBanner(data.placa, "Vehículo con reporte de hurto policial activo", "ROJO");
+            } else if (alerta === "AMARILLO") {
+                statusClass = "status-amarillo";
+                const multas = d.multas_simit || 0;
+                const txt = multas > 0 ? `${multas} Comparendos SIMIT` : "Documentos Vencidos";
+                badgeHtml = `<span class="status-badge status-badge-amarillo">${txt}</span>`;
+                noteClass = "note-amarillo";
+                const vMultas = d.valor_multas ? ` ($${Number(d.valor_multas).toLocaleString()} COP)` : "";
+                noteHtml = `<strong>Multas SIMIT:</strong> ${multas} pendiente(s)${vMultas}. SOAT: ${d.soat_vigente ? 'Vigente' : 'Vencido'}.`;
+                mostrarAlertaBanner(data.placa, `Registra ${multas} comparendos pendientes en SIMIT`, "AMARILLO");
+            } else if (alerta === "VERDE") {
+                statusClass = "status-verde";
+                badgeHtml = `<span class="status-badge status-badge-verde">Al Día</span>`;
+                noteClass = "note-verde";
+                noteHtml = `Vehículo verificado en base de datos. Sin multas ni pendientes.`;
             }
 
-            // Aplicar clase de animación reactiva
-            card.className = `plate-card ${alertClass}`;
+            card.className = `vehicle-card ${statusClass}`;
+
+            const vehiculoTxt = (d.marca && d.marca !== "NO REGISTRADO EN ANTECEDENTES")
+                ? `${d.marca} ${d.linea || ''} (${d.modelo || ''})`
+                : (isCar ? "Automóvil" : "Motocicleta");
+            const propietarioTxt = d.propietario || "No registrado";
+            const municipioTxt = data.municipio || "COLOMBIA";
+
+            const cropImgHtml = data.crop_base64
+                ? `<img src="data:image/jpeg;base64,${data.crop_base64}" alt="Placa ${data.placa}">`
+                : `<span style="font-size:0.65rem; color:var(--text-muted);">Sin foto</span>`;
 
             card.innerHTML = `
-                <div class="plate-card-crop" onclick="abrirModalFotograma('${data.placa}')" title="Haz clic para inspeccionar este fotograma en alta resolucion">
-                    ${cropImgHtml}
-                </div>
-                <div class="plate-details">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-                        <div class="colombian-plate-badge">
-                            <span class="plate-text-code">${data.placa}</span>
-                            <span class="plate-text-municipio">${municipio}</span>
-                        </div>
-                        ${alertaHtml}
+                <div class="card-header-row">
+                    <div class="plate-graphic ${isCar ? '' : 'white-plate'}">
+                        <span class="plate-code">${data.placa}</span>
+                        <span class="plate-city">${municipioTxt}</span>
                     </div>
-                    <div class="plate-meta-row">
-                        <span class="type-badge ${typeClass}">${typeLabel}</span>
-                        <div class="confidence-meter">
-                            <div class="meter-bar">
-                                <div class="meter-fill" style="width: ${confPct}%;"></div>
-                            </div>
-                            <span>${confPct}%</span>
-                        </div>
-                        <span style="font-family: monospace; font-size: 0.72rem;">${data.timestamp}</span>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                        ${badgeHtml}
+                        <span style="font-size: 0.70rem; color: var(--text-muted); font-weight: 500;">
+                            ${data.timestamp} &bull; Confianza ${confPct}%
+                        </span>
                     </div>
-                    ${infoAntecedentesHtml}
+                </div>
+
+                <div class="card-details-grid">
+                    <div class="plate-crop-thumbnail" onclick="abrirModalFotograma('${data.placa}')" title="Clic para ampliar fotograma">
+                        ${cropImgHtml}
+                    </div>
+                    <div class="meta-specs">
+                        <div class="meta-row">
+                            <span>Vehículo:</span>
+                            <strong>${vehiculoTxt}</strong>
+                        </div>
+                        <div class="meta-row">
+                            <span>Propietario:</span>
+                            <strong>${propietarioTxt}</strong>
+                        </div>
+                        <div class="meta-row">
+                            <span>SOAT:</span>
+                            <strong style="color: ${d.soat_vigente === 0 ? 'var(--rose)' : 'var(--text-main)'}">
+                                ${d.soat_vigente === 0 ? 'Vencido' : 'Vigente'}
+                            </strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-alert-note ${noteClass}">
+                    <span>${noteHtml}</span>
+                    <a href="https://www.fcm.org.co/simit/#/home-public" target="_blank" class="btn-simit-portal">Portal SIMIT</a>
                 </div>
             `;
         }
 
-        // Modal para inspeccionar fotogramas guardados
-        function abrirModalFotograma(placa) {
-            const data = registeredPlates.get(placa);
-            if (!data || !data.crop_base64) return;
-
-            document.getElementById("modal-title").innerText = `FOTOGRAMA GUARDADO - PLACA ${data.placa}`;
-            document.getElementById("modal-img").src = `data:image/jpeg;base64,${data.crop_base64}`;
-            document.getElementById("modal-badge").innerHTML = `
-                <span class="colombian-plate-badge" style="padding: 2px 6px;">
-                    <span class="plate-text-code" style="font-size: 1rem;">${data.placa}</span>
-                </span>
-            `;
-            document.getElementById("modal-meta").innerHTML = `
-                <div><strong>Hora de captura:</strong> ${data.timestamp} | <strong>Tipo:</strong> ${data.tipo}</div>
-                <div><strong>Confianza OCR:</strong> ${(data.confianza * 100).toFixed(1)}% | <strong>Municipio:</strong> ${data.municipio || 'COLOMBIA'}</div>
-            `;
-            document.getElementById("crop-modal").style.display = "flex";
-        }
-
-        function cerrarModalFotograma(event) {
-            if (!event || event.target.id === "crop-modal" || event.target.classList.contains("btn-modal-close")) {
-                document.getElementById("crop-modal").style.display = "none";
-            }
-        }
-
-        // Modal de SIMIT
-        async function abrirModalSimit() {
+        // Simulador de alertas para demostración rápida en clase
+        async function simularAlerta(placa) {
             try {
-                const res = await fetch("/api/simit_status");
-                const data = await res.json();
-                document.getElementById("simit-provider-lbl").innerText = data.provider + (data.has_api_key ? " (API EN LINEA CONECTADA)" : " (BASE LOCAL SQLITE)");
-                document.getElementById("simit-modal").style.display = "flex";
-            } catch (err) {
-                document.getElementById("simit-modal").style.display = "flex";
-            }
-        }
-
-        function cerrarModalSimit(event) {
-            if (!event || event.target.id === "simit-modal" || event.target.classList.contains("btn-modal-close")) {
-                document.getElementById("simit-modal").style.display = "none";
-            }
-        }
-
-        async function guardarConfiguracionSimit() {
-            const key = document.getElementById("simit-api-key").value.trim();
-            const provider = key ? "VERIFIK" : "LOCAL_DB";
-            try {
-                const res = await fetch("/api/set_simit_provider", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ provider: provider, api_key: key })
-                });
+                const res = await fetch(`/api/simulate_alert/${placa}`, { method: "POST" });
                 const data = await res.json();
                 if (data.success) {
-                    alert("Configuracion SIMIT actualizada correctamente.");
-                    document.getElementById("btn-simit-status").innerText = key ? "SIMIT: EN LINEA" : "SIMIT: CONECTADO";
-                    cerrarModalSimit();
+                    renderPlate(data.data);
                 }
-            } catch (err) {
-                alert("Error al guardar configuracion.");
-            }
+            } catch(e) {}
         }
 
-        async function onSourceChange(val) {
-            const lblSource = document.getElementById("lbl-source");
+        // Acciones de Cámara y Captura
+        async function cambiarFuenteCamara(val) {
             let target = val;
             if (val === "custom") {
-                const url = prompt("Ingrese la URL del stream (ej. http://192.168.1.15:4747/video):");
+                const url = prompt("Ingrese la URL del stream RTSP o HTTP (ej: http://192.168.1.15:8080/video):");
                 if (!url) {
-                    document.getElementById("select-source").value = "1";
+                    document.getElementById("select-source").value = "0";
                     return;
                 }
                 target = url;
             }
 
-            lblSource.innerText = "CONECTANDO...";
+            document.getElementById("val-source").innerText = "Conectando...";
             try {
                 const res = await fetch("/api/set_source", {
                     method: "POST",
@@ -1278,49 +1222,59 @@
                     body: JSON.stringify({ source: target })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    lblSource.innerText = "ACTIVO (" + data.source + ")";
-                } else {
-                    lblSource.innerText = "FALLO (" + data.source + ")";
-                    alert("No se pudo iniciar la fuente: " + data.source + ". Verifique que el dispositivo USB o celular este conectado.");
-                }
-            } catch (e) {
-                lblSource.innerText = "ERROR DE CONEXION";
+                document.getElementById("val-source").innerText = data.success ? `Cámara ${data.source}` : "Fallo";
+            } catch(e) {
+                document.getElementById("val-source").innerText = "Error";
             }
         }
 
+        async function refrescarCamaras() {
+            try {
+                const res = await fetch("/api/cameras");
+                const cams = await res.json();
+                const select = document.getElementById("select-source");
+                if (cams && cams.length > 0) {
+                    const curr = select.value;
+                    select.innerHTML = "";
+                    cams.forEach(c => {
+                        const opt = document.createElement("option");
+                        opt.value = c.id;
+                        opt.innerText = c.label;
+                        select.appendChild(opt);
+                    });
+                    const optCustom = document.createElement("option");
+                    optCustom.value = "custom";
+                    optCustom.innerText = "Dirección de red / IP Webcam...";
+                    select.appendChild(optCustom);
+                    select.value = curr;
+                }
+            } catch(e) {}
+        }
+
         async function toggleRoi() {
-            const btnRoi = document.getElementById("btn-roi");
+            const btn = document.getElementById("btn-roi");
             try {
                 const res = await fetch("/api/toggle_roi", { method: "POST" });
                 const data = await res.json();
                 if (data.use_roi) {
-                    btnRoi.classList.add("btn-active");
-                    btnRoi.innerText = "ENCUADRE OPTICO: ACTIVO";
+                    btn.classList.add("active");
                 } else {
-                    btnRoi.classList.remove("btn-active");
-                    btnRoi.innerText = "ENCUADRE OPTICO: INACTIVO";
+                    btn.classList.remove("active");
                 }
-            } catch (err) {}
+            } catch(e) {}
         }
 
-        async function capturarYConsultar() {
-            const btnSnap = document.getElementById("btn-snap");
-            const originalHtml = btnSnap.innerHTML;
-            btnSnap.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="spin">
-                    <line x1="12" y1="2" x2="12" y2="6"></line>
-                    <line x1="12" y1="18" x2="12" y2="22"></line>
-                    <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-                    <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-                    <line x1="2" y1="12" x2="6" y2="12"></line>
-                    <line x1="18" y1="12" x2="22" y2="12"></line>
-                    <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-                    <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+        async function capturarManual() {
+            const btn = document.getElementById("btn-snap");
+            const original = btn.innerHTML;
+            btn.innerHTML = `
+                <svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1s linear infinite;">
+                    <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
                 </svg>
-                <span>PROCESANDO FOTO Y CONSULTANDO ANTECEDENTES...</span>
+                <span>Optimizando nitidez y procesando filtros...</span>
             `;
-            btnSnap.disabled = true;
+            btn.disabled = true;
 
             try {
                 const res = await fetch("/api/capture_frame", { method: "POST" });
@@ -1328,36 +1282,40 @@
                 if (data.success) {
                     renderPlate(data.data);
                 } else {
-                    alert(data.error || "No se pudo leer la placa en la imagen.");
+                    alert(data.error || "No se detectó una placa legible tras la optimización de imagen.");
                 }
-            } catch (err) {
-                alert("Error de comunicacion con el servidor.");
+            } catch(e) {
+                alert("Error de comunicación con el servidor.");
             } finally {
-                btnSnap.innerHTML = originalHtml;
-                btnSnap.disabled = false;
+                btn.innerHTML = original;
+                btn.disabled = false;
             }
         }
 
-        // Atajo de teclado: Barra espaciadora para captura instantanea
+        // Atajo: Barra espaciadora para captura
         window.addEventListener("keydown", (e) => {
             if (e.code === "Space" && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
                 e.preventDefault();
-                capturarYConsultar();
+                capturarManual();
             }
             if (e.code === "Escape") {
                 cerrarModalFotograma();
-                cerrarModalSimit();
+                cerrarModalConfig();
             }
         });
 
+        // Limpiar registros
         async function limpiarRegistros() {
-            if (!confirm("Deseas reiniciar y limpiar el historial de placas?")) return;
+            if (!confirm("¿Deseas vaciar el registro visual de placas?")) return;
             try {
                 await fetch("/api/clear", { method: "POST" });
                 platesContainer.innerHTML = `
                     <div class="empty-state" id="empty-state">
-                        <span>SIN DETECCIONES REGISTRADAS</span>
-                        <span style="font-size: 0.75rem;">El sistema registrará automáticamente las placas y fotogramas detectados.</span>
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                        </svg>
+                        <p>Esperando vehículos frente a la cámara para iniciar la identificación.</p>
                     </div>
                 `;
                 registeredPlates.clear();
@@ -1366,90 +1324,61 @@
                 document.getElementById("cnt-total").innerText = "0";
                 document.getElementById("cnt-autos").innerText = "0";
                 document.getElementById("cnt-motos").innerText = "0";
-            } catch (err) {}
+                cerrarAlertBanner();
+            } catch(e) {}
         }
 
-        async function actualizarEstadoGemini() {
-            const btn = document.getElementById("btn-gemini");
-            try {
-                const res = await fetch("/api/gemini_status");
-                const data = await res.json();
-                if (data.available) {
-                    btn.classList.add("btn-active");
-                    btn.innerText = "MOTOR: GEMINI FLASH (ACTIVO)";
-                } else {
-                    btn.classList.remove("btn-active");
-                    btn.innerText = "MOTOR: LOCAL (EasyOCR)";
-                }
-            } catch (err) {}
+        // Modales
+        function abrirModalFotograma(placa) {
+            const item = registeredPlates.get(placa);
+            if (!item || !item.crop_base64) return;
+            document.getElementById("modal-title").innerText = `Fotograma Registrado: ${item.placa}`;
+            document.getElementById("modal-img").src = `data:image/jpeg;base64,${item.crop_base64}`;
+            document.getElementById("modal-meta").innerHTML = `
+                <div><strong>Hora:</strong> ${item.timestamp} | <strong>Tipo:</strong> ${item.tipo}</div>
+                <div><strong>Confianza OCR:</strong> ${(item.confianza * 100).toFixed(1)}% | <strong>Municipio:</strong> ${item.municipio || 'Colombia'}</div>
+            `;
+            document.getElementById("crop-modal").style.display = "flex";
         }
 
-        async function configurarGemini() {
-            const actual = prompt("Ingresa tu clave de API de Google Gemini (deja vacio para usar EasyOCR local):");
-            if (actual === null) return;
+        function cerrarModalFotograma() {
+            document.getElementById("crop-modal").style.display = "none";
+        }
+
+        function abrirModalConfig() {
+            document.getElementById("config-modal").style.display = "flex";
+        }
+
+        function cerrarModalConfig() {
+            document.getElementById("config-modal").style.display = "none";
+        }
+
+        async function guardarAjustes() {
+            const key = document.getElementById("gemini-key-input").value.trim();
             try {
                 await fetch("/api/set_gemini_key", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ api_key: actual.trim() })
+                    body: JSON.stringify({ api_key: key })
                 });
-                actualizarEstadoGemini();
-            } catch (err) {}
+                alert("Ajustes guardados correctamente.");
+                cerrarModalConfig();
+            } catch(e) {
+                alert("Error al guardar.");
+            }
         }
 
-        async function actualizarListaCamaras() {
-            const select = document.getElementById("select-source");
-            try {
-                const res = await fetch("/api/cameras");
-                const cams = await res.json();
-                if (cams && cams.length > 0) {
-                    const currentVal = select.value;
-                    select.innerHTML = "";
-                    cams.forEach(c => {
-                        const opt = document.createElement("option");
-                        opt.value = c.id;
-                        opt.innerText = "FUENTE: " + c.label.toUpperCase();
-                        select.appendChild(opt);
-                    });
-                    const optCustom = document.createElement("option");
-                    optCustom.value = "custom";
-                    optCustom.innerText = "FUENTE: STREAM IP / DROIDCAM";
-                    select.appendChild(optCustom);
-
-                    if ([...select.options].some(o => o.value === currentVal)) {
-                        select.value = currentVal;
-                    }
-                }
-            } catch (err) {}
-        }
-
-        // Cargar registros existentes y estado de la cámara al inicio
-        async function loadInitialStatus() {
-            try {
-                await actualizarListaCamaras();
-                const res = await fetch("/api/status");
-                const data = await res.json();
-                if (data.source !== undefined) {
-                    const sel = document.getElementById("select-source");
-                    const srcStr = String(data.source);
-                    sel.value = srcStr;
-                    document.getElementById("lbl-source").innerText = "ACTIVO (" + srcStr + ")";
-                }
-            } catch (err) {}
-        }
-
-        async function loadInitialPlates() {
+        // Carga inicial
+        async function init() {
             try {
                 const res = await fetch("/api/plates");
                 const list = await res.json();
-                list.forEach(renderPlate);
-            } catch (err) {}
+                if (Array.isArray(list)) list.forEach(renderPlate);
+            } catch(e) {}
+            connectWebSocket();
         }
 
-        loadInitialStatus();
-        loadInitialPlates();
-        actualizarEstadoGemini();
-        connectWebSocket();
+        init();
     </script>
 </body>
 </html>

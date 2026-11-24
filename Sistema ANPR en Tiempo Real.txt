@@ -1,0 +1,152 @@
+PROYECTO DE INTELIGENCIA COMPUTACIONAL
+Reconocimiento Automático de Placas
+Enfoque híbrido con Visión por Computador, Deep Learning y Lógica Difusa bajo normativa colombiana.
+Camilo RodriguezDaniel Rodriguez
+
+PLANTEAMIENTO DEL PROBLEMA
+El reto en entornos no controlados
+Alta velocidad: Desenfoque por movimiento en captura continua.
+Luz cambiante: Sombras asfálticas, sol directo y reflejos metálicos.
+Norma DIN 1451: Ambigüedad visual entre O, Q, 0, B y 8.
+Duplicidad: Registros repetidos por parpadeo del video.
+Consultas bloqueadas: Portales de tránsito protegidos por CAPTCHAs.
+
+ARQUITECTURA MULTIHILO · PRODUCTOR-CONSUMIDOR
+Pipeline desacoplado a 30 FPS
+01 · CAPTURA
+Video DirectShow
+30 FPS constantes.
+02 · DETECCIÓN
+YOLOv8 + HSV
+Localización espacial híbrida.
+03 · RASTREO
+IoU + Best-Shot
+Suavizado EMA temporal.
+04 · ÓPTICA
+LAB + CLAHE
+Bilateral más Otsu.
+05 · LECTURA
+Motor OCR
+EasyOCR / Gemini Flash.
+06 · SINTAXIS
+Reglas Colombia
+Morfología DIN 1451.
+07 · CONSULTA
+Motor 3 Capas
+SQLite, RapidFuzz, SIMIT.
+
+FASE 1 · LOCALIZACIÓN ESPACIAL
+Detección híbrida: YOLOv8 y HSV
+Filtro rápido de Sobel: descarta superficies lisas sin bordes/caracteres en 0.1 ms antes del OCR, optimizando el pipeline multihilo.
+Primaria: Deep Learning
+Respaldo: Visión Clásica
+•
+Modelo YOLOv8: Red ultraligera especializada en matrículas y optimizada para inferencia continua.
+•
+Inferencia rápida: Generación de caja delimitadora en ~35 ms en CPU estándar sin GPU.
+•
+Margen +14%: Expansión de región de interés para evitar recortar caracteres en los extremos.
+•
+Espacio HSV: Segmenta rango de amarillo particular y blanco público mediante canales H y S.
+•
+Morfología: Operación de clausura rectangular ajustada a proporción de aspecto entre 0.9 y 6.5.
+•
+Tolerancia: Respaldo activo en situaciones de contraluz extremo, suciedad o ángulos severos.
+
+FASE 2 · ESTABILIZACIÓN TEMPORAL
+Seguimiento temporal y Best-Shot
+Índice de nitidez Laplaciana: Cálculo de varianza sobre la imagen escalada para filtrar cuadros borrosos.
+Rastreador IoU
+Asociación de regiones en cuadros consecutivos (IoU ≥ 0.12) para mantener la identidad continua del vehículo.
+Filtro EMA
+Promedio móvil exponencial que suaviza la trayectoria y elimina temblores de cámara menores a 6 px.
+Votación por Mayoría
+Consenso temporal que recopila predicciones por fotograma y emite la moda estadística más estable.
+Buffer Best-Shot
+Conserva el fotograma óptimo y relanza el motor de OCR solo si la nitidez relativa incrementa un 25%.
+
+FASE 3 · CALIDAD VISUAL
+Preprocesamiento óptico para OCR
+1. Reescalado 130 px
+Interpolación bicúbica; acelera EasyOCR 18x.
+2. Recorte interno ROI
+Quita marco y tornillos (10% sup / 14% inf).
+3. LAB + CLAHE
+Ecualización local 8×8 del canal de luminancia.
+4. Filtro Bilateral
+Reduce grano conservando bordes nítidos.
+5. Umbral Otsu
+Segmenta trazos negros minimizando varianza.
+
+FASE 4 · RECONOCIMIENTO DE CARACTERES
+Motor OCR local y nube híbrida
+EASYOCR · FASE 1
+Red CRAFT
+EASYOCR · FASE 2
+Red CRNN
+MODO NUBE OPCIONAL
+Gemini 1.5 Flash
+Mapas de calor por carácter y enlaces de afinidad.
+Detección precisa de polígonos de texto incluso con perspectiva compleja o iluminación deficiente.
+CNN + Bi-LSTM + capa decodificadora CTC.
+Extracción de características de imagen y reconocimiento de secuencias sin alineación manual.
+Visión multimodal para placas deterioradas.
+Fallback dinámico en la nube activado ante baja confianza local (< 70%) o desgaste físico severo.
+
+FASE 5 · MORFOLOGÍA DE CARACTERES
+Desambiguación DIN 1451: Q vs O
+•
+Letra Q: Ratio ≥ 1.18 o densidad diagonal interna > 12%.
+•
+Letra O: Ratio simétrico entre 0.88 y 1.12.
+•
+Impacto: Elimina confusiones sistemáticas de OCR comerciales.
+
+FASE 6 · INTELIGENCIA SIMBÓLICA Y NORMATIVA RUNT
+Corrección sintáctica posicional
+Automóvil: ^[A-Z]{3}[0-9]{3}$→ 3 Letras + 3 NúmerosMotocicleta: ^[A-Z]{3}[0-9]{2}[A-Z]$→ 3 Letras + 2 Números + 1 Letra
+Posición 0, 1, 2
+Formato esperable: Letra
+Carro: Letra · Moto: Letra
+Regla de conversión (OCR → Sintaxis):
+0→O · 8→B · 5→S · 1→I · 4→A
+Explicación: Si el OCR detecta un número en las primeras 3 posiciones, se reemplaza automáticamente por su letra visualmente equivalente.
+Posición 3, 4
+Formato esperable: Dígito
+Carro: Dígito · Moto: Dígito
+Regla de conversión (OCR → Sintaxis):
+O→0 · Q→0 · B→8 · S→5 · I→1
+Explicación: Si se detecta una letra en la sección central de la placa, se corrige obligatoriamente hacia su dígito numérico semejante.
+Posición 5
+Formato: Carro: Dígito | Moto: Letra
+Carácter final divergente según tipo
+Restricción oficial RUNT:
+Regla RUNT: motos nunca terminan en O ni Q
+Explicación: La reglamentación vial colombiana prohíbe explícitamente el uso de las letras O y Q al final de las placas de motocicleta para evitar fraude.
+filter_alt
+Ventana deslizante: Rescata la matrícula exacta de 6 caracteres ante bordes ruidosos.
+¿Cómo funciona?: Analiza sub-cadenas continuas dentro del texto detectado por OCR, descartando caracteres periféricos irrelevantes (marcos de placa, tornillos o suciedad).
+
+FASE 7 · CONSULTA DE ANTECEDENTES
+Búsqueda de antecedentes en 3 capas
+Semáforo de Alertas
+1. SQLite Indexado (0.2 ms)
+Índice árbol B con complejidad logarítmica O(log N).
+2. Búsqueda Difusa (RapidFuzz)
+Distancia de Levenshtein con umbral ≥ 82% ante deterioro.
+3. SIMIT Oficial (API SODA)
+Consulta comparendos en vivo vía Datos Abiertos sin CAPTCHAs.
+Rojo: Hurto activo u orden policial.
+Amarillo: Multas o SOAT vencido.
+Verde: Vehículo al día sin novedades.
+
+EVALUACIÓN EN TIEMPO REAL · FASTAPI + WEBSOCKETS
+Métricas de desempeño en vivo
+30 FPS
+Video fluido sin latencia
+~35 ms
+Inferencia YOLOv8 en CPU
+80–140 ms
+Ciclo completo por placa
+> 95%
+Precisión sintaxis Colombia

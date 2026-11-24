@@ -94,7 +94,7 @@ def consultar_simit_datos_gov(placa: str, timeout: float = None) -> dict | None:
     if len(placa_clean) != 6:
         return None
 
-    to = timeout or _CONFIG.get("timeout_seconds", 6.0)
+    to = timeout or min(1.8, float(_CONFIG.get("timeout_seconds", 1.8)))
     params = {
         "placa": placa_clean,
         "$limit": "100"
@@ -250,31 +250,37 @@ def consultar_simit_local(placa: str) -> dict | None:
 def consultar_simit(placa: str) -> dict:
     """
     Función principal de consulta SIMIT en cascada:
-    1. Si provider == 'DATOS_GOV_CO' (default): Consulta la API oficial de datos.gov.co.
-    2. Si tiene éxito: actualiza la base local y retorna los datos en vivo.
+    1. Si está en la base local SQLite con datos de comparendos, responde en 0.2 ms.
+    2. Si provider == 'DATOS_GOV_CO': Consulta la API oficial con timeout ultracorto (1.8s máx).
     3. Si la API falla o no hay conexión: fallback inmediato a SQLite local.
-    4. Si no está en BD local ni en API: retorna estado limpio con enlace oficial.
     """
     placa_clean = re.sub(r'[^A-Z0-9]', '', str(placa).upper().strip())
 
-    # 1. Consulta en línea a datos.gov.co
-    if _CONFIG.get("provider") == "DATOS_GOV_CO":
-        online_res = consultar_simit_datos_gov(placa_clean)
-        if online_res:
-            return online_res
-
-    # 2. Fallback a base local SQLite
+    # 1. Consulta rápida local primero para evitar latencias de red
     local_res = consultar_simit_local(placa_clean)
+    if local_res and local_res.get("multas_count", 0) > 0:
+        return local_res
+
+    # 2. Consulta en línea a datos.gov.co si no hay multas locales
+    if _CONFIG.get("provider") == "DATOS_GOV_CO":
+        try:
+            online_res = consultar_simit_datos_gov(placa_clean, timeout=1.8)
+            if online_res:
+                return online_res
+        except Exception:
+            pass
+
+    # 3. Fallback a registro local o estado limpio
     if local_res:
         return local_res
 
-    # 3. No censado
+    # 4. No censado
     return {
         "placa": placa_clean,
         "origen": "NO_CENSADO",
         "multas_count": 0,
         "valor_total": 0,
-        "detalle": "Placa sin historial de comparendos en SIMIT. Al día.",
+        "detalle": "Placa sin historial de comparendos reportados en SIMIT.",
         "estado": "AL_DIA",
         "url_portal": URL_PORTAL_OFICIAL_FCM
     }

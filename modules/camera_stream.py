@@ -46,6 +46,35 @@ from modules.tracker import RealtimePlateTracker, calcular_iou, son_la_misma_pla
 from modules.gemini_ocr import gemini_disponible, consultar_gemini_placa
 
 
+def get_roi_coordinates(w_f: int, h_f: int) -> tuple[int, int, int, int]:
+    """
+    Calcula las coordenadas del Encuadre Óptico adaptativo.
+    En horizontal (PC / webcam / celular apaisado): rectángulo centrado ~2.15:1.
+    En vertical (celular en modo portrait / DroidCam vertical): rectángulo centrado ~1.95:1.
+    Garantiza que la placa o el celular quepan de forma ergonómica y natural.
+    """
+    if w_f >= h_f:
+        # Orientación horizontal
+        roi_w = int(w_f * 0.62)
+        roi_h = int(roi_w / 2.15)
+        if roi_h > int(h_f * 0.72):
+            roi_h = int(h_f * 0.72)
+            roi_w = int(roi_h * 2.15)
+    else:
+        # Orientación vertical (celular en retrato 9:16)
+        roi_w = int(w_f * 0.88)
+        roi_h = int(roi_w / 1.95)
+        if roi_h > int(h_f * 0.55):
+            roi_h = int(h_f * 0.55)
+            roi_w = int(roi_h * 1.95)
+
+    rx1 = max(0, (w_f - roi_w) // 2)
+    ry1 = max(0, (h_f - roi_h) // 2)
+    rx2 = min(w_f, rx1 + roi_w)
+    ry2 = min(h_f, ry1 + roi_h)
+    return rx1, ry1, rx2, ry2
+
+
 def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
     """
     Descomposición cromática HSV para placas colombianas (Amarillo y Blanco).
@@ -62,7 +91,9 @@ def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
     # Rango extendido amarillo colombiano (5-42) y blanco reflectivo (0-180 con alta luminancia)
     mask_y = cv2.inRange(hsv, np.array([5, 30, 70]), np.array([42, 255, 255]))
     mask_w = cv2.inRange(hsv, np.array([0, 0, 130]), np.array([180, 55, 255]))
-    mask = cv2.bitwise_or(mask_y, mask_w)
+    # Celulares y pantallas LCD: blanco frío / cianico de retroiluminación
+    mask_screen = cv2.inRange(hsv, np.array([80, 10, 160]), np.array([135, 75, 255]))
+    mask = cv2.bitwise_or(mask_y, cv2.bitwise_or(mask_w, mask_screen))
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 5))
     mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -70,14 +101,14 @@ def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
 
     for c in contornos:
         area = cv2.contourArea(c)
-        if 700 <= area <= int(h_f * w_f * 0.98):
+        if 600 <= area <= int(h_f * w_f * 0.98):
             cx, cy, cw, ch = cv2.boundingRect(c)
             ratio = float(cw) / max(1, ch)
-            if 0.9 <= ratio <= 6.5 and cw >= 35 and ch >= 14:
+            if 0.75 <= ratio <= 6.5 and cw >= 35 and ch >= 14:
                 crop = frame_bgr[cy:cy+ch, cx:cx+cw]
                 tiene_texto, _ = verificar_densidad_caracteres(crop)
                 # Si el área es grande (acercamiento de celular), aceptar incluso si la densidad varía
-                if tiene_texto or area >= (h_f * w_f * 0.12):
+                if tiene_texto or area >= (h_f * w_f * 0.08):
                     pad_x = int(cw * 0.14)
                     pad_y = int(ch * 0.10)
                     gx1 = max(0, cx - pad_x)
@@ -89,16 +120,21 @@ def detectar_placas_por_color(frame_bgr: np.ndarray) -> list[tuple]:
     return cajas
 
 
-def abrir_dispositivo_captura(source):
+_CAMARAS_CACHE = None
+_CAMARAS_CACHE_TIME = 0.0
+
+
+def abrir_dispositivo_captura(source, quick_probe=False):
     """
     Abre una cámara física, virtual (DroidCam, Iriun, Camo) o stream de red.
-    En Windows prueba DirectShow (CAP_DSHOW), Media Foundation (CAP_MSMF) y CAP_ANY,
-    verificando que cap.read() entregue efectivamente fotogramas válidos.
+    En Windows utiliza DirectShow (CAP_DSHOW) de forma prioritaria para evitar bloqueos
+    y demoras de Media Foundation (MSMF).
     """
     is_num = str(source).isdigit() or isinstance(source, int)
     if is_num:
         idx = int(source)
-        backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY] if sys.platform.startswith('win') else [cv2.CAP_ANY]
+        # En Windows DirectShow es instantáneo y estable; CAP_ANY es el fallback rápido
+        backends = [cv2.CAP_DSHOW, cv2.CAP_ANY] if sys.platform.startswith('win') else [cv2.CAP_ANY]
         for backend in backends:
             try:
                 cap = cv2.VideoCapture(idx, backend)
@@ -106,14 +142,10 @@ def abrir_dispositivo_captura(source):
                     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     ret, test_frame = cap.read()
                     if ret and test_frame is not None and test_frame.size > 0:
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-                        cap.set(cv2.CAP_PROP_FPS, 30)
-                        ret2, test2 = cap.read()
-                        if not ret2 or test2 is None:
-                            cap.release()
-                            cap = cv2.VideoCapture(idx, backend)
-                            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        if not quick_probe:
+                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                            cap.set(cv2.CAP_PROP_FPS, 30)
                         return cap
                     else:
                         cap.release()
@@ -128,7 +160,7 @@ def abrir_dispositivo_captura(source):
                 if src_str.startswith("http") or src_str.startswith("rtsp"):
                     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 ret, test_frame = cap.read()
-                if ret and test_frame is not None:
+                if ret and test_frame is not None and test_frame.size > 0:
                     return cap
                 cap.release()
         except Exception:
@@ -136,21 +168,42 @@ def abrir_dispositivo_captura(source):
         return None
 
 
-def listar_camaras_disponibles() -> list[dict]:
+def listar_camaras_disponibles(force_refresh=False) -> list[dict]:
     """
-    Escanea índices de cámara disponibles en el sistema y retorna solo las que entregan video.
+    Escanea índices de cámara de forma ultrarrápida (0 a 2) con DirectShow.
+    Utiliza caché en memoria para responder en 0 ms en llamadas sucesivas.
     """
+    global _CAMARAS_CACHE, _CAMARAS_CACHE_TIME
+    now = time.time()
+    if not force_refresh and _CAMARAS_CACHE is not None and (now - _CAMARAS_CACHE_TIME < 15.0):
+        return _CAMARAS_CACHE
+
     camaras = []
-    for i in range(8):
-        cap = abrir_dispositivo_captura(i)
-        if cap:
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            cap.release()
-            camaras.append({
-                "id": str(i),
-                "label": f"Cámara {i} (Física / Celular / Virtual - {w}x{h})"
-            })
+    # Escanear índices 0, 1 y 2 (cubre webcam integrada, cámara USB/celular y secundaria)
+    max_indices = 3
+    for i in range(max_indices):
+        backend = cv2.CAP_DSHOW if sys.platform.startswith('win') else cv2.CAP_ANY
+        cap = None
+        try:
+            cap = cv2.VideoCapture(i, backend)
+            if cap and cap.isOpened():
+                ret, frame = cap.read()
+                if ret and frame is not None and frame.size > 0:
+                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
+                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
+                    label = f"Cámara {i} (Principal / Webcam - {w}x{h})" if i == 0 else f"Cámara {i} (USB / Celular - {w}x{h})"
+                    camaras.append({
+                        "id": str(i),
+                        "label": label
+                    })
+        except Exception:
+            pass
+        finally:
+            if cap:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
 
     test_video = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "video_prueba.mp4")
     if os.path.exists(test_video):
@@ -158,6 +211,9 @@ def listar_camaras_disponibles() -> list[dict]:
             "id": "file",
             "label": "Video de Prueba Local (video_prueba.mp4)"
         })
+
+    _CAMARAS_CACHE = camaras
+    _CAMARAS_CACHE_TIME = now
     return camaras
 
 
@@ -220,6 +276,9 @@ class LiveCameraEngine:
         self.tracking_thread = None
         self.ocr_worker_thread = None
         self.listeners = []
+
+    def get_roi_coordinates(self, w_f: int, h_f: int) -> tuple[int, int, int, int]:
+        return get_roi_coordinates(w_f, h_f)
 
     @property
     def history_plates(self):
@@ -297,6 +356,7 @@ class LiveCameraEngine:
         Garantiza que la imagen nunca se congele o se dañe en el navegador.
         """
         src = int(new_source) if str(new_source).isdigit() else new_source
+        prev_source = self.source
 
         with self.lock:
             old_cap = self.cap
@@ -307,7 +367,7 @@ class LiveCameraEngine:
                 old_cap.release()
             except Exception:
                 pass
-        time.sleep(0.3)
+        time.sleep(0.15)
 
         new_cap = abrir_dispositivo_captura(src)
 
@@ -321,7 +381,18 @@ class LiveCameraEngine:
             print(f"[CAMARA] Cambio exitoso a fuente: {new_source}")
             return True
         else:
-            print(f"[ERROR] No se pudo abrir la fuente: {new_source}")
+            print(f"[ADVERTENCIA] No se pudo abrir la fuente solicitada: {new_source}. Restaurando respaldo...")
+            # Intentar restaurar fuente previa o fallback a video local
+            fallback_cap = abrir_dispositivo_captura(prev_source) if prev_source != new_source else None
+            if not fallback_cap:
+                test_vid = os.path.join(BASE_DIR, "data", "video_prueba.mp4")
+                if os.path.exists(test_vid):
+                    fallback_cap = abrir_dispositivo_captura(test_vid)
+                    prev_source = "file"
+
+            with self.lock:
+                self.cap = fallback_cap
+                self.source = prev_source
             return False
 
     def _capture_loop(self):
@@ -358,11 +429,12 @@ class LiveCameraEngine:
 
             time.sleep(0.003)
 
-    def _ejecutar_ocr_en_recorte(self, crop_bgr: np.ndarray, reader) -> list[dict]:
+    def _ejecutar_ocr_en_recorte(self, crop_bgr: np.ndarray, reader, modo_profundo: bool = False) -> list[dict]:
         """
         Ejecuta OCR sobre el recorte con superresolución y coteja municipios de Colombia.
-        Robusto ante marcos de concesionario (Chevrolet, Toyota), tornillos y división de tokens.
-        Incluye pipeline multi-intento (CLAHE -> Crudo -> Unsharp Blur para carretera).
+        En modo estándar (video en vivo): 2 pasadas rápidas (~250 ms).
+        En modo profundo (al tomar foto): Batería completa de filtros de nitidez, contraste,
+        Black-Hat morfológico de caracteres troquelados y umbrales adaptativos.
         """
         if crop_bgr is None or crop_bgr.size < 400:
             return []
@@ -375,32 +447,57 @@ class LiveCameraEngine:
 
         allowlist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- .@&"
 
-        def ejecutar_easyocr(img_in):
+        def ejecutar_easyocr(img_in, text_thresh=0.45, low_thresh=0.25):
             try:
                 h_in, w_in = img_in.shape[:2]
-                if h_in > 140 or h_in < 100:
-                    scale = 130.0 / float(h_in)
-                    interp = cv2.INTER_AREA if h_in > 140 else cv2.INTER_CUBIC
-                    img_to_feed = cv2.resize(img_in, (max(40, int(w_in * scale)), 130), interpolation=interp)
+                scale_x, scale_y = 1.0, 1.0
+                # Si es un recorte ajustado de placa (h <= 220), normalizar a ~130 px de alto
+                if 45 <= h_in <= 220:
+                    if h_in > 150 or h_in < 95:
+                        scale = 130.0 / float(h_in)
+                        interp = cv2.INTER_AREA if h_in > 150 else cv2.INTER_CUBIC
+                        new_w = max(40, int(w_in * scale))
+                        img_to_feed = cv2.resize(img_in, (new_w, 130), interpolation=interp)
+                        scale_x = new_w / float(w_in)
+                        scale_y = 130.0 / float(h_in)
+                    else:
+                        img_to_feed = img_in
+                elif h_in > 220:
+                    # ES UN ENCUADRE ÓPTICO O PANTALLA DE CELULAR:
+                    # No aplastar a 130 px; conservar resolución para que CRAFT y CRNN lean los caracteres nítidos
+                    if max(h_in, w_in) > 720:
+                        scale = 720.0 / float(max(h_in, w_in))
+                        new_w = int(w_in * scale)
+                        new_h = int(h_in * scale)
+                        img_to_feed = cv2.resize(img_in, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                        scale_x = new_w / float(w_in)
+                        scale_y = new_h / float(h_in)
+                    else:
+                        img_to_feed = img_in
                 else:
                     img_to_feed = img_in
 
-                return reader.readtext(
+                tokens = reader.readtext(
                     img_to_feed,
                     allowlist=allowlist,
                     detail=1,
                     paragraph=False,
                     mag_ratio=1.4,
-                    text_threshold=0.5,
-                    low_text=0.3,
+                    text_threshold=text_thresh,
+                    low_text=low_thresh,
                     add_margin=0.06
                 )
+                return tokens, scale_x, scale_y
             except Exception:
-                return []
+                return [], 1.0, 1.0
 
-        def procesar_tokens_ocr(res_tokens):
+        def procesar_tokens_ocr(res_pack):
+            if not res_pack:
+                return None
+            res_tokens, scale_x, scale_y = res_pack
             if not res_tokens:
                 return None
+
             candidatos = []
             municipios = []
             todos_los_textos = []
@@ -411,13 +508,19 @@ class LiveCameraEngine:
                     continue
                 todos_los_textos.append((texto_limpio, float(prob)))
                 clasificacion, texto_proc = clasificar_texto_colombiano(texto_limpio)
+
+                # Mapear coordenadas de bbox_pts a crop_bgr
+                xs = [pt[0] / scale_x for pt in bbox_pts]
+                ys = [pt[1] / scale_y for pt in bbox_pts]
+                token_bbox = (int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys)))
+
                 if clasificacion == "MUNICIPIO":
                     municipios.append(texto_proc)
                 elif clasificacion != "DESCARTAR":
                     candidatos.append({
                         "texto": texto_proc,
                         "prob": float(prob),
-                        "bbox": (bbox_pts[0][0], bbox_pts[0][1], bbox_pts[2][0], bbox_pts[2][1]),
+                        "bbox": token_bbox,
                         "clasif": clasificacion
                     })
 
@@ -450,50 +553,138 @@ class LiveCameraEngine:
             if municipios and tipo_vehiculo != "MOTO":
                 municipio_oficial = coincidir_municipio_colombiano(municipios[0], tipo_vehiculo) or municipios[0]
 
+            # Si el recorte original era amplio (pantalla de celular o encuadre), extraer sub_bbox ajustado
+            plate_sub_bbox = None
+            if candidatos:
+                cands_en_placa = [c for c in candidatos if c["texto"] in mejor_placa]
+                if not cands_en_placa:
+                    cands_en_placa = candidatos
+                if cands_en_placa:
+                    min_x = max(0, min(c["bbox"][0] for c in cands_en_placa))
+                    min_y = max(0, min(c["bbox"][1] for c in cands_en_placa))
+                    max_x = min(w_orig, max(c["bbox"][2] for c in cands_en_placa))
+                    max_y = min(h_orig, max(c["bbox"][3] for c in cands_en_placa))
+                    pad_x = int((max_x - min_x) * 0.16)
+                    pad_y = int((max_y - min_y) * 0.28)
+                    plate_sub_bbox = (
+                        max(0, min_x - pad_x),
+                        max(0, min_y - pad_y),
+                        min(w_orig, max_x + pad_x),
+                        min(h_orig, max_y + pad_y)
+                    )
+
+            recorte_final = crop_bgr
+            if plate_sub_bbox and (h_orig > 200 or w_orig > 380):
+                bx1, by1, bx2, by2 = plate_sub_bbox
+                if (bx2 - bx1) >= 40 and (by2 - by1) >= 18:
+                    sub_crop = crop_bgr[by1:by2, bx1:bx2]
+                    if sub_crop.size > 200:
+                        recorte_final = sub_crop
+
             return {
                 "placa_raw": str(mejor_placa),
                 "confianza": round(prob_final, 4),
                 "tipo": tipo_vehiculo,
                 "municipio": municipio_oficial,
-                "recorte_img": crop_bgr
+                "recorte_img": recorte_final,
+                "sub_bbox": plate_sub_bbox
             }
 
-        # Multi-intento jerárquico optimizado para máxima fidelidad de caracteres (< 300 ms):
         h_orig, w_orig = crop_bgr.shape[:2]
+        # Solo recortar márgenes si ya es un recorte ajustado de placa (h <= 200 y proporción horizontal)
+        if h_orig <= 200 and (w_orig / max(1, h_orig)) >= 1.2:
+            inner_crop = crop_bgr[int(h_orig * 0.08):int(h_orig * 0.82), int(w_orig * 0.05):int(w_orig * 0.95)]
+            prep_target = inner_crop if (inner_crop.size > 400 and inner_crop.shape[0] >= 20) else crop_bgr
+        else:
+            prep_target = crop_bgr
 
-        # Intento 1: Afeitar marco exterior perimetral (Inner Plate Crop)
-        # Elimina marcos negros y tornillos que se leen erróneamente como 'I', '1' o 'L'.
-        inner_crop = crop_bgr[int(h_orig * 0.08):int(h_orig * 0.82), int(w_orig * 0.05):int(w_orig * 0.95)]
-        dict_det = procesar_tokens_ocr(ejecutar_easyocr(inner_crop if inner_crop.size > 400 else crop_bgr))
+        # Atenuación de sobreexposición para pantallas de celular
+        if prep_target.size > 0:
+            gray_check = cv2.cvtColor(prep_target, cv2.COLOR_BGR2GRAY) if len(prep_target.shape) == 3 else prep_target
+            if np.mean(gray_check > 235) > 0.20:
+                prep_target = cv2.convertScaleAbs(prep_target, alpha=0.82, beta=-15)
 
-        # Intento 2: Motion Deblur (Unsharp Masking) sobre el recorte interno
+        # 1. Filtro CLAHE en LAB (Excelente para luminancia general)
+        mejorada = mejorar_placa_lejana(prep_target)
+        dict_det = procesar_tokens_ocr(ejecutar_easyocr(mejorada))
+
+        # 2. Filtro Afilado High-Pass Unsharp Masking (Aumenta contraste de bordes borrosos)
         if not dict_det:
-            target_img = inner_crop if inner_crop.size > 400 else crop_bgr
-            gauss = cv2.GaussianBlur(target_img, (0, 0), 2.0)
-            unsharp = cv2.addWeighted(target_img, 2.0, gauss, -1.0, 0)
+            gauss = cv2.GaussianBlur(prep_target, (0, 0), 2.2)
+            unsharp = cv2.addWeighted(prep_target, 2.4, gauss, -1.4, 0)
             dict_det = procesar_tokens_ocr(ejecutar_easyocr(unsharp))
 
-        # Intento 3: Recorte completo sin afeitar (para motos o placas sin marco)
-        if not dict_det:
-            dict_det = procesar_tokens_ocr(ejecutar_easyocr(crop_bgr))
+        # Si estamos en modo profundo (al tomar foto), aplicar la batería de desblurring y superresolución:
+        if modo_profundo and not dict_det:
+            # 3. Realce Multiescala por Pirámide Laplaciana (Resuelve desenfoque gaussiano y falta de foco)
+            try:
+                g1 = cv2.GaussianBlur(prep_target, (0, 0), 0.9)
+                g2 = cv2.GaussianBlur(prep_target, (0, 0), 2.2)
+                sharp_multi = cv2.addWeighted(prep_target, 2.6, g1, -1.2, 0)
+                sharp_multi = np.clip(cv2.addWeighted(sharp_multi, 1.25, g2, -0.35, 0), 0, 255).astype(np.uint8)
+                dict_det = procesar_tokens_ocr(ejecutar_easyocr(sharp_multi, text_thresh=0.28, low_thresh=0.15))
+            except Exception:
+                pass
 
-        # Intento 4 (Adaptive Thresholding para velocidad y contraste local):
-        if not dict_det:
-            target_img = inner_crop if inner_crop.size > 400 else crop_bgr
-            gray = cv2.cvtColor(target_img, cv2.COLOR_BGR2GRAY)
-            th_adapt = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 9)
-            th_bgr = cv2.cvtColor(th_adapt, cv2.COLOR_GRAY2BGR)
-            dict_det = procesar_tokens_ocr(ejecutar_easyocr(th_bgr))
+        if modo_profundo and not dict_det:
+            # 4. Filtro Morfológico Black-Hat (Aísla trazos oscuros troquelados eliminando brillos amarillos/blancos)
+            try:
+                gray = cv2.cvtColor(prep_target, cv2.COLOR_BGR2GRAY)
+                k_w = max(5, int(prep_target.shape[1] * 0.04))
+                k_h = max(3, int(prep_target.shape[0] * 0.08))
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_w, k_h))
+                blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+                _, th_bh = cv2.threshold(blackhat, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+                dict_det = procesar_tokens_ocr(ejecutar_easyocr(cv2.cvtColor(th_bh, cv2.COLOR_GRAY2BGR), text_thresh=0.30, low_thresh=0.18))
+            except Exception:
+                pass
 
-        # Intento 5: Con preprocesamiento de alta definición normalizado (LAB / CLAHE)
-        if not dict_det:
-            preprocesada = mejorar_placa_lejana(crop_bgr)
-            dict_det = procesar_tokens_ocr(ejecutar_easyocr(preprocesada))
+        if modo_profundo and not dict_det:
+            # 5. Binarización Adaptativa Local de Sauvola (Aísla caracteres borrosos o con sombras degradadas)
+            try:
+                gray_f = cv2.cvtColor(prep_target, cv2.COLOR_BGR2GRAY).astype(np.float32)
+                media = cv2.blur(gray_f, (17, 17))
+                media_sq = cv2.blur(gray_f**2, (17, 17))
+                desv = np.sqrt(np.maximum(0, media_sq - media**2))
+                umbral_sauvola = media * (1.0 + 0.28 * (desv / 128.0 - 1.0))
+                sauvola_bin = np.where(gray_f > umbral_sauvola, 255, 0).astype(np.uint8)
+                sauvola_bgr = cv2.cvtColor(sauvola_bin, cv2.COLOR_GRAY2BGR)
+                dict_det = procesar_tokens_ocr(ejecutar_easyocr(sauvola_bgr, text_thresh=0.28, low_thresh=0.16))
+            except Exception:
+                pass
 
-        # Intento 6 (Otsu Adaptive Binarization): Separa caracteres de reflejos lumínicos / contraluz
-        if not dict_det:
-            otsu_img = binarizar_placa_otsu(crop_bgr)
-            dict_det = procesar_tokens_ocr(ejecutar_easyocr(otsu_img))
+        if modo_profundo and not dict_det:
+            # 6. Desconvolución de Wiener Espectral (Restaura barrido de movimiento horizontal)
+            try:
+                gray_w = cv2.cvtColor(prep_target, cv2.COLOR_BGR2GRAY).astype(np.float32)
+                h_p, w_p = gray_w.shape
+                psf = np.zeros((h_p, w_p), dtype=np.float32)
+                largo_blur = max(5, int(w_p * 0.04))
+                psf[h_p // 2, max(0, w_p // 2 - largo_blur // 2) : min(w_p, w_p // 2 + largo_blur // 2 + 1)] = 1.0 / largo_blur
+                H = np.fft.fft2(np.fft.fftshift(psf))
+                G = np.fft.fft2(gray_w)
+                W = np.conj(H) / (np.abs(H)**2 + 0.02)
+                wiener_res = np.clip(np.real(np.fft.ifft2(G * W)), 0, 255).astype(np.uint8)
+                wiener_bgr = cv2.cvtColor(wiener_res, cv2.COLOR_GRAY2BGR)
+                dict_det = procesar_tokens_ocr(ejecutar_easyocr(wiener_bgr, text_thresh=0.28, low_thresh=0.16))
+            except Exception:
+                pass
+
+        if modo_profundo and not dict_det:
+            # 7. Super-Resolución Lanczos 1.5x con detección ultra-sensible de bordes
+            try:
+                h_p, w_p = prep_target.shape[:2]
+                upscaled = cv2.resize(prep_target, (int(w_p * 1.5), int(h_p * 1.5)), interpolation=cv2.INTER_LANCZOS4)
+                # Filtro Laplaciano fino sobre imagen ampliada
+                kernel_lap = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
+                sharpened_up = cv2.filter2D(upscaled, -1, kernel_lap)
+                dict_det = procesar_tokens_ocr(ejecutar_easyocr(sharpened_up, text_thresh=0.22, low_thresh=0.12))
+            except Exception:
+                pass
+
+        # 8. Fallback final sobre el recorte completo original si recortar bordes fue excesivo
+        if not dict_det and crop_bgr.size > 400:
+            dict_det = procesar_tokens_ocr(ejecutar_easyocr(crop_bgr, text_thresh=0.28 if modo_profundo else 0.45, low_thresh=0.16 if modo_profundo else 0.25))
 
         if dict_det:
             placa_cand = dict_det["placa_raw"]
@@ -582,18 +773,39 @@ class LiveCameraEngine:
                     if 0.8 <= ratio <= 8.5 and bw >= 35 and bh >= 15 and bw <= w_frame and bh <= h_frame:
                         detected_bboxes.append((gx1, gy1, gx2, gy2))
 
-            # 2. Fallback por descomposición de color HSV si YOLO no detectó nada (fotos impresas, celulares, reflejos)
-            if not detected_bboxes:
-                color_boxes = detectar_placas_por_color(frame_to_process)
-                if color_boxes:
-                    detected_bboxes.extend(color_boxes)
+            # 2. Inferencia focalizada en el Encuadre Óptico (ROI)
+            # Permite capturar placas en celulares y primeros planos aunque YOLO en plano completo falle
+            rx1, ry1, rx2, ry2 = self.get_roi_coordinates(w_frame, h_frame)
+            roi_crop = frame_to_process[ry1:ry2, rx1:rx2]
 
-            # 3. Fallback de encuadre central si YOLO y color no detectaron nada (acercamientos de celular en pantalla completa)
+            if self.use_roi and roi_crop.size >= 1000:
+                try:
+                    roi_res = plate_detector(roi_crop, imgsz=640, verbose=False, conf=0.10)
+                    for r in roi_res:
+                        for box in r.boxes:
+                            bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
+                            gx1 = max(0, rx1 + bx1)
+                            gy1 = max(0, ry1 + by1)
+                            gx2 = min(w_frame, rx1 + bx2)
+                            gy2 = min(h_frame, ry1 + by2)
+                            detected_bboxes.append((gx1, gy1, gx2, gy2))
+                except Exception:
+                    pass
+
+            # 3. Fallback por descomposición de color HSV si YOLO no detectó nada (fotos impresas, celulares, reflejos)
             if not detected_bboxes:
-                rx1, ry1 = int(w_frame * 0.12), int(h_frame * 0.15)
-                rx2, ry2 = int(w_frame * 0.88), int(h_frame * 0.85)
-                crop_center = frame_to_process[ry1:ry2, rx1:rx2]
-                tiene_txt, _ = verificar_densidad_caracteres(crop_center)
+                if self.use_roi and roi_crop.size >= 1000:
+                    roi_color = detectar_placas_por_color(roi_crop)
+                    for (cx1, cy1, cx2, cy2) in roi_color:
+                        detected_bboxes.append((rx1 + cx1, ry1 + cy1, rx1 + cx2, ry1 + cy2))
+                if not detected_bboxes:
+                    color_boxes = detectar_placas_por_color(frame_to_process)
+                    if color_boxes:
+                        detected_bboxes.extend(color_boxes)
+
+            # 4. Fallback de encuadre óptico si YOLO y color no detectaron nada (pantallas de celular en primer plano)
+            if not detected_bboxes and (self.use_roi or not self.tracker.active_tracks):
+                tiene_txt, _ = verificar_densidad_caracteres(roi_crop)
                 if tiene_txt or not self.tracker.active_tracks:
                     detected_bboxes.append((rx1, ry1, rx2, ry2))
 
@@ -667,17 +879,14 @@ class LiveCameraEngine:
 
         # Dibujar retícula de encuadre óptico si está activo
         if self.use_roi:
-            rx1 = int(w_f * 0.17)
-            ry1 = int(h_f * 0.17)
-            rx2 = int(w_f * 0.83)
-            ry2 = int(h_f * 0.83)
+            rx1, ry1, rx2, ry2 = self.get_roi_coordinates(w_f, h_f)
 
             # Dibujar esquinas del encuadre en verde/cyan brillante
-            self._draw_corner_rect(frame, (rx1, ry1), (rx2, ry2), (0, 230, 118), 2, 35)
+            self._draw_corner_rect(frame, (rx1, ry1), (rx2, ry2), (0, 230, 118), 2, 40)
 
-            roi_label = "[ENCUADRE OPTICO HD]"
-            cv2.putText(frame, roi_label, (rx1 + 10, ry1 + 22), cv2.FONT_HERSHEY_DUPLEX, 0.48, (18, 22, 28), 3, cv2.LINE_AA)
-            cv2.putText(frame, roi_label, (rx1 + 10, ry1 + 22), cv2.FONT_HERSHEY_DUPLEX, 0.48, (0, 230, 118), 1, cv2.LINE_AA)
+            roi_label = "[ENCUADRE OPTICO: CENTRA LA PLACA O CELULAR]"
+            cv2.putText(frame, roi_label, (rx1 + 10, ry1 + 22), cv2.FONT_HERSHEY_DUPLEX, 0.44, (18, 22, 28), 3, cv2.LINE_AA)
+            cv2.putText(frame, roi_label, (rx1 + 10, ry1 + 22), cv2.FONT_HERSHEY_DUPLEX, 0.44, (0, 230, 118), 1, cv2.LINE_AA)
 
         for det in detections:
             x1, y1, x2, y2 = det["bbox"]

@@ -546,6 +546,16 @@ def extraer_placa_estricta(texto_crudo: str, crop_bgr: np.ndarray = None) -> tup
             conf_ajustada = conf * (0.95 if start == 0 or start == len(alfa)-6 else 0.88)
             candidatos_evaluados.append((codigo, tipo, conf_ajustada))
 
+    # 4. Partición estructural pura (3 letras iniciales + 3 números iniciales)
+    # Resuelve de forma infalible cuando hay tornillos intermedios o bordes (ej: BLJT7322 -> BLJ732)
+    letras_seq = [c for c in alfa if c.isalpha()]
+    digitos_seq = [c for c in alfa if c.isdigit()]
+    if len(letras_seq) >= 3 and len(digitos_seq) >= 3:
+        cand_part = "".join(letras_seq[:3]) + "".join(digitos_seq[:3])
+        c_part, t_part, conf_part = evaluar_candidato_6(cand_part)
+        if c_part:
+            candidatos_evaluados.append((c_part, t_part, conf_part * 0.96))
+
     if not candidatos_evaluados:
         return None, None, 0.0
 
@@ -734,16 +744,24 @@ def analizar_frame(frame_bgr: np.ndarray) -> list[dict]:
                         "conf_detector": 0.5
                     })
 
-    # 3. Fallback de encuadre central si no hubo detecciones (para primeros planos de celular)
+    # 3. Fallback de encuadre adaptativo si no hubo detecciones (para primeros planos de celular y cámaras móviles)
     if not candidatos_placa:
-        rx1, ry1 = int(w_frame * 0.12), int(h_frame * 0.15)
-        rx2, ry2 = int(w_frame * 0.88), int(h_frame * 0.85)
+        if w_frame >= h_frame:
+            roi_w = int(w_frame * 0.62)
+            roi_h = int(min(h_frame * 0.72, roi_w / 2.15))
+        else:
+            roi_w = int(w_frame * 0.88)
+            roi_h = int(min(h_frame * 0.55, roi_w / 1.95))
+        rx1 = max(0, (w_frame - roi_w) // 2)
+        ry1 = max(0, (h_frame - roi_h) // 2)
+        rx2 = min(w_frame, rx1 + roi_w)
+        ry2 = min(h_frame, ry1 + roi_h)
         crop_center = frame_bgr[ry1:ry2, rx1:rx2]
         tiene_txt, var_score = verificar_densidad_caracteres(crop_center)
-        if tiene_txt:
+        if tiene_txt or not candidatos_placa:
             candidatos_placa.append({
                 "bbox": (rx1, ry1, rx2, ry2),
-                "conf_detector": 0.4,
+                "conf_detector": 0.45,
                 "var_score": var_score
             })
 

@@ -36,8 +36,8 @@ from modules.search_engine import consultar_placa
 from modules.gemini_ocr import gemini_disponible, guardar_gemini_key, obtener_gemini_key, consultar_gemini_placa
 
 # Inicializar motor de captura asíncrono
-# Por defecto prioriza la cámara USB / Celular (1) sobre la webcam integrada (0)
-default_source = 1
+# Por defecto prioriza la cámara principal integrada/webcam (0), luego secundaria (1)
+default_source = 0
 engine = LiveCameraEngine(source=default_source, sampling_step=4, min_confidence=0.28)
 
 # Administrador de conexiones WebSocket activas
@@ -77,11 +77,11 @@ async def lifespan(app: FastAPI):
     global server_loop
     server_loop = asyncio.get_running_loop()
 
-    # Iniciar motor de cámara: priorizar cámara USB / Celular (1), luego integrada (0), luego 2
+    # Iniciar motor de cámara: priorizar cámara 0 (webcam/USB principal), luego 1, luego video
     started = False
-    for cam_idx in [1, 0, 2]:
+    for cam_idx in [0, 1]:
         if engine.start(cam_idx):
-            print(f"[INFO] Camara principal iniciada con exito en indice: {cam_idx}")
+            print(f"[INFO] Cámara principal iniciada con éxito en índice: {cam_idx}")
             started = True
             break
 
@@ -184,7 +184,27 @@ async def capture_frame():
     h_f, w_f = frame.shape[:2]
     cajas = []
 
-    # 1. Detección YOLO
+    # Coordenadas exactas del Encuadre Óptico adaptativo
+    rx1_roi, ry1_roi, rx2_roi, ry2_roi = engine.get_roi_coordinates(w_f, h_f)
+    roi_crop = frame[ry1_roi:ry2_roi, rx1_roi:rx2_roi]
+
+    # 1. Si el Encuadre Óptico está activo, dar máxima prioridad al área encuadrada
+    # Esto garantiza detección inmediata al mostrar un celular o apuntar con el teléfono
+    if engine.use_roi and roi_crop.size >= 1000:
+        res_roi = plate_detector(roi_crop, imgsz=640, verbose=False, conf=0.10)
+        for r in res_roi:
+            for box in r.boxes:
+                bx1, by1, bx2, by2 = map(int, box.xyxy[0].tolist())
+                cajas.append((max(0, rx1_roi + bx1), max(0, ry1_roi + by1), min(w_f, rx1_roi + bx2), min(h_f, ry1_roi + by2)))
+
+        cajas_color_roi = detectar_placas_por_color(roi_crop)
+        for (cx1, cy1, cx2, cy2) in cajas_color_roi:
+            cajas.append((rx1_roi + cx1, ry1_roi + cy1, rx1_roi + cx2, ry1_roi + cy2))
+
+        # Añadir el encuadre óptico completo como candidato prioritario
+        cajas.append((rx1_roi, ry1_roi, rx2_roi, ry2_roi))
+
+    # 2. Detección YOLO en fotograma completo
     res = plate_detector(frame, imgsz=640, verbose=False, conf=0.12)
     for r in res:
         for box in r.boxes:
@@ -195,15 +215,13 @@ async def capture_frame():
             pad_y = int(ph * 0.10)
             cajas.append((max(0, bx1 - pad_x), max(0, by1 - pad_y), min(w_f, bx2 + pad_x), min(h_f, by2 + pad_y)))
 
-    # 2. Fallback por descomposición de color HSV si YOLO no detectó nada
+    # 3. Fallback por descomposición de color HSV general si aún no hay cajas
     if not cajas:
         cajas = detectar_placas_por_color(frame)
 
-    # 3. Fallback de encuadre central si todo lo anterior no encontró caja
+    # 4. Fallback de encuadre
     if not cajas:
-        rx1, ry1 = int(w_f * 0.15), int(h_f * 0.20)
-        rx2, ry2 = int(w_f * 0.85), int(h_f * 0.80)
-        cajas.append((rx1, ry1, rx2, ry2))
+        cajas.append((rx1_roi, ry1_roi, rx2_roi, ry2_roi))
 
     # Filtrar cajas con NMS
     cajas = aplicar_nms_cajas(cajas, iou_threshold=0.20)
@@ -212,8 +230,8 @@ async def capture_frame():
     mejor_crop = None
     mejor_bbox = None
 
-    # Evaluar candidatos hasta encontrar la placa con mayor confianza
-    for (rx1, ry1, rx2, ry2) in cajas[:4]:
+    # Evaluar candidatos hasta encontrar la placa con mayor confianza usando OCR Profundo
+    for (rx1, ry1, rx2, ry2) in cajas[:5]:
         c_cand = frame[ry1:ry2, rx1:rx2]
         if c_cand.size < 400:
             continue
@@ -221,18 +239,41 @@ async def capture_frame():
         if gemini_disponible():
             det_cand = consultar_gemini_placa(c_cand)
         if not det_cand:
-            ocr_res = engine._ejecutar_ocr_en_recorte(c_cand, reader)
+            # Activar modo profundo: Batería completa de nitidez, contraste LAB y Black-Hat
+            ocr_res = engine._ejecutar_ocr_en_recorte(c_cand, reader, modo_profundo=True)
             if ocr_res:
                 det_cand = ocr_res[0]
         if det_cand and det_cand.get("placa_raw") and det_cand["placa_raw"] != "DESCONOCIDO":
             if det is None or det_cand.get("confianza", 0) > det.get("confianza", 0):
                 det = det_cand
-                mejor_crop = c_cand
-                mejor_bbox = (rx1, ry1, rx2, ry2)
+                mejor_crop = det_cand.get("recorte_img", c_cand)
+                if "sub_bbox" in det_cand and det_cand["sub_bbox"]:
+                    sbx1, sby1, sbx2, sby2 = det_cand["sub_bbox"]
+                    mejor_bbox = (max(0, rx1 + sbx1), max(0, ry1 + sby1), min(w_f, rx1 + sbx2), min(h_f, ry1 + sby2))
+                else:
+                    mejor_bbox = (rx1, ry1, rx2, ry2)
+
+    # Si aún no se resolvió, reintentar con recorte expandido (+12% margen de seguridad)
+    if not det:
+        for (rx1, ry1, rx2, ry2) in cajas[:2]:
+            pad_x = int((rx2 - rx1) * 0.15)
+            pad_y = int((ry2 - ry1) * 0.15)
+            c_exp = frame[max(0, ry1 - pad_y):min(h_f, ry2 + pad_y), max(0, rx1 - pad_x):min(w_f, rx2 + pad_x)]
+            if c_exp.size >= 400:
+                ocr_res = engine._ejecutar_ocr_en_recorte(c_exp, reader, modo_profundo=True)
+                if ocr_res and ocr_res[0].get("placa_raw") != "DESCONOCIDO":
+                    det = ocr_res[0]
+                    mejor_crop = det.get("recorte_img", c_exp)
+                    if "sub_bbox" in det and det["sub_bbox"]:
+                        sbx1, sby1, sbx2, sby2 = det["sub_bbox"]
+                        mejor_bbox = (max(0, rx1 - pad_x + sbx1), max(0, ry1 - pad_y + sby1), min(w_f, rx1 - pad_x + sbx2), min(h_f, ry1 - pad_y + sby2))
+                    else:
+                        mejor_bbox = (max(0, rx1 - pad_x), max(0, ry1 - pad_y), min(w_f, rx2 + pad_x), min(h_f, ry2 + pad_y))
+                    break
 
     # Si no se leyó una placa definitiva, igual devolver el mejor encuadre con métrica de diagnóstico
     if not det or mejor_crop is None:
-        primer_caja = cajas[0] if cajas else (int(w_f * 0.15), int(h_f * 0.20), int(w_f * 0.85), int(h_f * 0.80))
+        primer_caja = cajas[0] if cajas else (rx1_roi, ry1_roi, rx2_roi, ry2_roi)
         cx1, cy1, cx2, cy2 = primer_caja
         crop_duda = frame[cy1:cy2, cx1:cx2] if frame[cy1:cy2, cx1:cx2].size > 100 else frame
         ret, buf = cv2.imencode('.jpg', crop_duda, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -315,6 +356,45 @@ async def capture_frame():
 async def get_plates():
     """Retorna el historial completo de placas detectadas."""
     return JSONResponse(list(engine.history_plates.values()))
+
+
+@app.post("/api/simulate_alert/{placa}")
+async def simulate_alert(placa: str):
+    """
+    Simula una detección de prueba (ej. FRT890 para hurto, XYZ45E para multas, ABC123 para al día).
+    Permite demostrar la reacción inmediata de alertas en tiempo real al jurado o profesor.
+    """
+    placa_clean = placa.strip().upper()
+    ant = consultar_placa(placa_clean)
+    tipo = "MOTO" if (len(placa_clean) == 6 and placa_clean[-1].isalpha()) else "CARRO"
+    
+    # Simular recorte visual mínimo
+    import numpy as np
+    dummy_crop = np.zeros((80, 200, 3), dtype=np.uint8)
+    dummy_crop[:] = (35, 45, 60)
+    cv2.putText(dummy_crop, placa_clean, (20, 52), cv2.FONT_HERSHEY_DUPLEX, 1.1, (240, 245, 250), 2)
+    ret, buf = cv2.imencode('.jpg', dummy_crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    b64_crop = base64.b64encode(buf).decode('utf-8') if ret else ""
+
+    payload = {
+        "track_id": int(time.time()),
+        "placa": placa_clean,
+        "placa_raw_ocr": placa_clean,
+        "auto_corregido": False,
+        "tipo": tipo,
+        "municipio": "BOGOTA D.C.",
+        "confianza": 0.98,
+        "hits": 1,
+        "timestamp": time.strftime("%H:%M:%S"),
+        "crop_base64": b64_crop,
+        "bbox": (100, 100, 300, 200),
+        "antecedentes": ant
+    }
+
+    engine.tracker.confirmed_history[placa_clean] = payload
+    engine.tracker._guardar_historial_persistente()
+    engine._notify_listeners({"event": "NEW_PLATE", "data": payload})
+    return {"success": True, "data": payload}
 
 
 @app.get("/api/antecedentes/{placa}")
